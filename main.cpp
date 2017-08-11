@@ -96,6 +96,12 @@ struct Ast {
 };
 
 
+struct Env {
+    Env* parent;
+    std::vector<std::string> names;
+};
+
+
 struct Function {
     std::string name;
 };
@@ -145,14 +151,19 @@ public:
 
 
 int main(int argc, char** argv) {
-    std::array<char, 256> line;
-    for (;;) {
-        printf("  ");
-        if (!fgets(line.data(), line.size(), stdin)) break;
-        Parser pars(line.data());
-        pars.expr().print();
-        printf("\n");
-        pars.match(0);
-    }
+
+    FILE* f = fopen("test.c", "r");
+    if (!f) return 1;
+    fseek(f, 0, SEEK_END);
+    int size = ftell(f);
+    rewind(f);
+    std::vector<char> bytes(size + 1);
+    fread(bytes.data(), 1, size, f);
+    fclose(f);
+
+    Parser pars(bytes.data());
+    pars.expr().print();
+    pars.match(0);
+
     return 0;
 }
