@@ -1,12 +1,11 @@
-
-int a = 5;
-
-int foo() {
-   a = a + 5;
-   return a * 2;
+f() {
+   f = f + 1;
+   return f;
 }
 
-int main() {
-   a = a * 3;
-   return foo();
+main() {
+   f = 5;
+   g = f() * f() * f();
 }
+
+

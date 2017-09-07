@@ -13,10 +13,12 @@ class Lexer {
 protected:
     enum Token {
         NUM = 128, ID,
+        RETURN, IF, ELSE, WHILE,
+
 
         // operators in precedence order
         ASGN, OR, XOR, AND, // TODO
-        EQU, NEQ, LTN, GTN, LEQ, GEQ, SHL, SHR, ADD, SUB, MUL, DIV, MOD, NOP
+        EQ, NE, LT, GT, LE, GE, SHL, SHR, ADD, SUB, MUL, DIV, MOD, NOP
     };
     void init(const char* pos) {
         m_pos = pos;
@@ -40,18 +42,26 @@ private:
             if (c == '+') return ADD;
             if (c == '-') return SUB;
             if (c == '*') return MUL;
-            if (c == '/') return DIV;
+            if (c == '/') {
+                if (*m_pos != '/') return DIV;
+                while (*m_pos && *m_pos != '\n') ++m_pos;
+                continue;
+            }
             if (c == '%') return MOD;
             if (c == '<') return *m_pos == '<' ? ++m_pos, SHL :
-                                 *m_pos == '=' ? ++m_pos, LEQ : LTN;
+                                 *m_pos == '=' ? ++m_pos, LE : LT;
             if (c == '>') return *m_pos == '>' ? ++m_pos, SHR :
-                                 *m_pos == '=' ? ++m_pos, GEQ : GTN;
-            if (c == '!') return *m_pos == '=' ? ++m_pos, NEQ : c;
-            if (c == '=') return *m_pos == '=' ? ++m_pos, EQU : ASGN;
+                                 *m_pos == '=' ? ++m_pos, GE : GT;
+            if (c == '!') return *m_pos == '=' ? ++m_pos, NE : c;
+            if (c == '=') return *m_pos == '=' ? ++m_pos, EQ : ASGN;
 
             if (isalpha(c) || c == '_') {
                 m_name = c;
                 while (isalnum(*m_pos) || *m_pos == '_') m_name += *m_pos++;
+                if (m_name == "return") return RETURN;
+                if (m_name == "if")     return IF;
+                if (m_name == "else")   return ELSE;
+                if (m_name == "while")  return WHILE;
                 return ID;
             }
 
@@ -72,21 +82,15 @@ private:
 struct Ast {
 
     enum Type {
-        Invalid,
         Num,
-        Add,
-        Sub,
-        Neg,
-        Not,
-        Mul,
-        Div,
-        Mod,
-
+        Not, Neg,
+        Or, Xor, And, Eq, Ne, Lt, Le, Gt, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod,
         Var,
-        Call,
         Asgn,
-        Ret,
         Block,
+
+        Call,
+        Ret,
     };
 
     Type             type;
@@ -101,33 +105,18 @@ struct Ast {
         kids.emplace_back(std::move(a));
         return *this;
     }
-
-    void print() const {
-        printf("(%c", "?#+-_!*/%$C=R{"[type]);
-        if (type == Var) printf("%s", name.c_str());
-        if (type == Num) printf("%d", number);
-        for (const Ast& a : kids) a.print();
-        printf(")");
-    }
-
 };
 
 
 struct Function {
     std::string name;
-    Ast         ast;
+    int         address = -1;
+    Ast         block;
 };
 
 
 struct Program {
     std::vector<Function> functions;
-    void print() const {
-        for (const Function& f : functions) {
-            printf("%s ", f.name.c_str());
-            f.ast.print();
-            printf("\n");
-        }
-    }
 };
 
 
@@ -137,7 +126,7 @@ public:
     Program parse(char* pos) {
         init(pos);
 
-        Program program;
+        Program prog;
 
         while (m_tok != 0) {
             if (m_tok == ID) {
@@ -149,21 +138,24 @@ public:
                 match('(');
                 match(')');
                 if (m_tok != '{') errx(1, "no function block");
-                func.ast = stmt();
+                func.block = stmt();
 
-                program.functions.emplace_back(std::move(func));
+                prog.functions.emplace_back(std::move(func));
                 continue;
             }
-            errx(1, "error parsing program");
+            errx(1, "error parsing prog");
         }
-        return program;
+        return prog;
     }
 
 private:
     Ast stmt() {
-        if (m_tok == -1) {
-            // ...
-            return Ast(-1);
+        if (m_tok == RETURN) {
+            next();
+            Ast node(Ast::Ret);
+            if (m_tok != ';') node.add(expr());
+            match(';');
+            return node;
         }
         else if (m_tok == '{') {
             next();
@@ -179,22 +171,27 @@ private:
         }
     }
 
-    Ast expr(int level = EQU) {
+    Ast expr(int level = EQ) {
         Ast node;
 
         // unary stuff
         if      (m_tok == NUM) { next(); node = Ast(m_num); }
         else if (m_tok == ADD) { next(); node = expr(NOP); }
-        else if (m_tok == SUB) { next(); node = Ast(Ast::Type::Neg).add(expr(NOP)); }
+        else if (m_tok == SUB) { next(); node = Ast(Ast::Neg).add(expr(NOP)); }
         else if (m_tok == '(') { next(); node = expr(); match(')'); }
-        else if (m_tok == '!') { next(); node = Ast(Ast::Type::Not).add(expr(NOP)); }
+        else if (m_tok == '!') { next(); node = Ast(Ast::Not).add(expr(NOP)); }
         else if (m_tok == ID) {
             next();
             if (m_tok == '(') {
-                errx(1, "TODO: function call");
+                node = Ast(Ast::Call);
+                node.name = m_name;
+                next();
+                match(')');
             }
-            node = Ast(Ast::Type::Var);
-            node.name = m_name;
+            else {
+                node = Ast(Ast::Var);
+                node.name = m_name;
+            }
         }
         else errx(1, "bad expression %d", m_tok);
 
@@ -222,15 +219,150 @@ enum Opcode {
     JMP, JZ, JNZ, CALL, RET,
     INC, DEC, NOT, NEG,
     OR, XOR, AND, EQ, NE, LT, LE, GT, GE, SHL, SHR, ADD, SUB, MUL, DIV, MOD,
-    PRINT
 };
 
 
-void run(const std::vector<int>& code) {
-    std::array<int, 1024> mem;
-    int sp = mem.size();
+class Compiler {
+public:
 
-    int pc = 0;
+    std::vector<int>& code() { return m_code; }
+
+    void compile(Program& prog) {
+
+        // TODO analyzsis
+
+        m_program = &prog;
+        m_variables.clear();
+        m_code.clear();
+
+        for (Function& func : prog.functions) {
+            func.address = m_code.size();
+
+            compile(func.block);
+
+            m_code.emplace_back(RET);
+        }
+
+    }
+private:
+
+    void address(Ast& node) {
+        switch (node.type) {
+        case Ast::Var:
+            int i;
+            for (i = 0; i < (int) m_variables.size(); ++i) {
+                if (node.name == m_variables[i]) break;
+            }
+            if (i == (int) m_variables.size()) m_variables.emplace_back(node.name);
+            m_code.emplace_back(IMM);
+            m_code.emplace_back(i);
+            break;
+        default:
+            errx(1, "address %d", node.type);
+        }
+    }
+
+    void compile(Ast& node) {
+        switch (node.type) {
+        case Ast::Block:
+            for (Ast& n : node.kids) compile(n);
+            return;
+
+        case Ast::Asgn:
+            address(node.kids[0]);
+            m_code.emplace_back(PUSH);
+            compile(node.kids[1]);
+            m_code.emplace_back(SI);
+            return;
+
+        case Ast::Num:
+            m_code.emplace_back(IMM);
+            m_code.emplace_back(node.number);
+            return;
+
+        case Ast::Neg:
+            compile(node.kids[0]);
+            m_code.emplace_back(NEG);
+            return;
+
+        case Ast::Not:
+            compile(node.kids[0]);
+            m_code.emplace_back(NOT);
+            return;
+
+        // binary operators
+        case Ast::Or:
+        case Ast::Xor:
+        case Ast::And:
+        case Ast::Eq:
+        case Ast::Ne:
+        case Ast::Lt:
+        case Ast::Le:
+        case Ast::Gt:
+        case Ast::Ge:
+        case Ast::Shl:
+        case Ast::Shr:
+        case Ast::Add:
+        case Ast::Sub:
+        case Ast::Mul:
+        case Ast::Div:
+        case Ast::Mod:
+            compile(node.kids[0]);
+            m_code.emplace_back(PUSH);
+            compile(node.kids[1]);
+            m_code.emplace_back(node.type - Ast::Or + OR);
+            return;
+
+        case Ast::Var:
+            int i;
+            for (i = 0; i < (int) m_variables.size(); ++i) {
+                if (node.name == m_variables[i]) break;
+            }
+            if (i == (int) m_variables.size()) m_variables.emplace_back(node.name);
+            m_code.emplace_back(IMM);
+            m_code.emplace_back(i);
+            m_code.emplace_back(LI);
+            return;
+
+        case Ast::Call:
+            m_code.emplace_back(CALL);
+            for (Function& func : m_program->functions) {
+                if (node.name == func.name) {
+                    // TODO: we need another pass
+                    if (func.address == -1) errx(1, "function address not know yet");
+                    m_code.emplace_back(func.address);
+                    return;
+                }
+                if (func.address == -1) errx(1, "unknown function '%s'", node.name.c_str());
+            }
+            m_code.emplace_back(0);
+            return;
+
+
+        case Ast::Ret:
+            if (!node.kids.empty()) compile(node.kids[0]);
+            m_code.emplace_back(RET);
+            return;
+
+
+
+        default:
+            errx(1, "compile %d", node.type);
+        }
+    }
+
+    std::vector<std::string> m_variables;
+    std::vector<int>         m_code;
+    Program*                 m_program;
+};
+
+
+
+void run(const std::vector<int>& code, int pc) {
+    std::array<int, 1024> mem = {};
+    int sp = mem.size();
+    mem[--sp] = code.size();
+
     int ax = 0;
 
     while (pc < (int) code.size()) {
@@ -264,26 +396,16 @@ void run(const std::vector<int>& code) {
         case MUL:   ax = mem.at(sp++) * ax; break;
         case DIV:   ax = mem.at(sp++) / ax; break;
         case MOD:   ax = mem.at(sp++) % ax; break;
-        case PRINT: printf("%d\n", ax); break;
         default:    errx(1, "unknown instruction: %d", op); break;
         }
     }
 
-    for ( int i = 0; i < 10; ++i ) printf(" %d", mem[i]);
+    for (int i = 0; i < 10; ++i) printf(" %d", mem[i]);
     printf("\n");
 }
 
 
 int main(int argc, char** argv) {
-/*
-    std::vector<int> code = {
-        IMM, 2, PUSH, IMM, 10, SI,
-        PRINT,
-        IMM, 2, PUSH, LI, DEC, SI,
-        JNZ, 6
-    };
-    run(code);
-*/
 
     FILE* f = fopen("test.c", "r");
     if (!f) return 1;
@@ -294,8 +416,23 @@ int main(int argc, char** argv) {
     fread(bytes.data(), 1, size, f);
     fclose(f);
 
-    Program program = Parser().parse(bytes.data());
-    program.print();
+    Program prog = Parser().parse(bytes.data());
+
+    Compiler comp;
+    comp.compile(prog);
+
+    for (int i : comp.code()) printf(" %d", i);
+    printf("\n");
+
+
+    int pc = 0;
+    for (Function& func : prog.functions) {
+        if (func.name == "main") {
+            pc = func.address;
+            break;
+        }
+    }
+    run(comp.code(), pc);
 
     return 0;
 }
