@@ -1,0 +1,218 @@
+#!/usr/bin/python
+
+# operators in precedence order
+INFIX_LEVEL = {
+	"=":   0,
+	"|":   1,
+	"^":   2,
+	"&":   3,
+	"==":  4,
+	"!=":  5,
+	"<":   7,
+	">":   7,
+	"<=":  9,
+	">=":  9,
+	"<<": 11,
+	">>": 11,
+	"+":  13,
+	"-":  13,
+	"*":  16,
+	"/":  16,
+	"%":  16,
+}
+
+KEYWORDS = [
+	"return",
+	"if",
+	"else",
+	"while",
+]
+
+
+class Lexer:
+	def __init__(self, code):
+		self._code = code
+		self._pos  = 0
+
+		self.tok  = ""
+		self.name = ""
+		self.number  = 0
+
+		self.next()
+
+	def next(self): self.tok = self.scan()
+
+	def char(self): return self._code[self._pos : self._pos + 1]
+
+	def scan(self):
+		while self._pos < len(self._code):
+			c = self._code[self._pos]
+			self._pos += 1
+
+			if c.isalpha() or c == '_':
+				self.name = c
+				while self.char().isalnum() or self.char() == '_':
+					self.name += self._code[self._pos]
+					self._pos += 1
+				if self.name in KEYWORDS: return self.name
+				return "id"
+
+			if c.isdigit():
+				self.number = int(c)
+				while self.char().isdigit():
+					self.number = self.number * 10 + int(self._code[self._pos])
+					self._pos += 1
+				return "number"
+
+			if c in "+-*%(){};~": return c
+			if c == "/":
+				if self.char() != '/': return "/";
+				while self._pos < len(self._code) and self._code[self._pos] != "\n":
+					self._pos += 1
+				continue
+
+			if c in "<>":
+				if self.char() not in c + "=": return c
+				self._pos += 1
+				return c + self.char()
+
+			if c in "!=":
+				if self.char() != "=": return c
+				self._pos += 1
+				return c + "="
+
+			if not c.isspace():
+				print "unexpected character", c
+				exit(-1)
+
+		return ""
+
+
+
+
+class Node:
+
+	def __init__(self, type):
+		self.type = type
+		self.kids = []
+
+	def add(self, kid):
+		self.kids.append(kid)
+		return self
+
+	def pretty_print(self, indent=0):
+		line = " " * indent + self.type
+		if hasattr(self, "name"): line += " %r" % self.name
+		if hasattr(self, "number"): line += " %d" % self.number
+		print line
+		for k in self.kids:
+			k.pretty_print(indent + 1)
+
+
+
+
+class Parser(Lexer):
+	def __init__(self, code):
+		Lexer.__init__(self, code)
+
+	def parse(self):
+
+		prog = Node("program")
+
+		while self.tok:
+			if self.tok == "id":
+				func = Node("func")
+				func.name = self.name
+
+				self.next()
+				self.match('(')
+				# TODO: arguments
+				self.match(')')
+				if self.tok != '{':
+					print "no function block"
+					exit(1)
+
+				func.add(self.stmt())
+				prog.add(func)
+				continue
+
+			print "error parsing program"
+			exit(1)
+		return prog
+
+	def stmt(self):
+		if self.tok == "return":
+			self.next()
+			node = Node("return")
+			if self.tok != ";": node.add(self.expr())
+			self.match(";")
+			return node
+		elif self.tok == "{":
+			self.next()
+			node = Node("block")
+			while self.tok != "}": node.add(self.stmt())
+			self.next()
+			return node
+		else:
+			node = self.expr()
+			self.match(';')
+			return node
+
+	def expr(self, level=0):
+
+		# unary stuff
+		if self.tok == "number":
+			self.next()
+			node = Node("number")
+			node.number = self.number
+		elif self.tok == "+":
+			self.next()
+			node = self.expr(99)
+		elif self.tok == "-":
+			self.next()
+			node = Node("neg").add(self.expr(99))
+		elif self.tok == "(":
+			self.next()
+			node = self.expr()
+			self.match(")")
+		elif self.tok == "!":
+			self.next()
+			node = Node("not").add(self.expr(99))
+		elif self.tok == "id":
+			self.next()
+			if self.tok == '(':
+				node = Node("call")
+				node.name = self.name
+				self.next()
+				# TODO: args
+				self.match(')')
+			else:
+				node = Node("var")
+				node.name = self.name
+		else:
+			print "bad expression '%s'" % self.tok
+			exit(1)
+
+		# infix stuff
+		while self.tok in INFIX_LEVEL and INFIX_LEVEL[self.tok] >= level:
+			if self.tok not in ("=", "+", "-", "*", "/", "%"):
+				print "bad expression '%s'" % self.tok
+				exit(1)
+			tok = self.tok
+			self.next()
+			node = Node(tok).add(node).add(self.expr(INFIX_LEVEL[tok] + 1))
+		return node
+
+	def match(self, tok):
+		if tok != self.tok:
+			print "unexpected token '%s' (should be '%s')" & (tok, self.tok)
+			exit(1)
+		self.next()
+
+
+if __name__ == "__main__":
+
+	code = file("test.c").read()
+	ast = Parser(code).parse()
+	ast.pretty_print()
+
