@@ -1,5 +1,27 @@
 #!/usr/bin/python
 
+
+class Node:
+
+	def __init__(self, type):
+		self.type = type
+		self.kids = []
+
+	def add(self, kid):
+		kid.parent = self
+		self.kids.append(kid)
+		return self
+
+	def pretty_print(self, indent=0):
+		line = " " * indent + self.type
+		if hasattr(self, "name"): line += " %r" % self.name
+		if hasattr(self, "number"): line += " %d" % self.number
+		print line
+		for k in self.kids:
+			k.pretty_print(indent + 1)
+
+
+
 # operators in precedence order
 INFIX_LEVEL = {
 	"=":   0,
@@ -89,28 +111,6 @@ class Lexer:
 
 
 
-
-class Node:
-
-	def __init__(self, type):
-		self.type = type
-		self.kids = []
-
-	def add(self, kid):
-		self.kids.append(kid)
-		return self
-
-	def pretty_print(self, indent=0):
-		line = " " * indent + self.type
-		if hasattr(self, "name"): line += " %r" % self.name
-		if hasattr(self, "number"): line += " %d" % self.number
-		print line
-		for k in self.kids:
-			k.pretty_print(indent + 1)
-
-
-
-
 class Parser(Lexer):
 	def __init__(self, code):
 		Lexer.__init__(self, code)
@@ -195,9 +195,6 @@ class Parser(Lexer):
 
 		# infix stuff
 		while self.tok in INFIX_LEVEL and INFIX_LEVEL[self.tok] >= level:
-			if self.tok not in ("=", "+", "-", "*", "/", "%"):
-				print "bad expression '%s'" % self.tok
-				exit(1)
 			tok = self.tok
 			self.next()
 			node = Node(tok).add(node).add(self.expr(INFIX_LEVEL[tok] + 1))
@@ -208,6 +205,7 @@ class Parser(Lexer):
 			print "unexpected token '%s' (should be '%s')" & (tok, self.tok)
 			exit(1)
 		self.next()
+
 
 
 if __name__ == "__main__":
