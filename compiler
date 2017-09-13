@@ -14,7 +14,7 @@ class Node:
 
 	def pretty_print(self, indent=0):
 		line = " " * indent + self.type
-		if hasattr(self, "name"): line += " %r" % self.name
+		if hasattr(self, "name"):   line += " %r" % self.name
 		if hasattr(self, "number"): line += " %d" % self.number
 		print line
 		for k in self.kids:
@@ -103,9 +103,7 @@ class Lexer:
 				self._pos += 1
 				return c + "="
 
-			if not c.isspace():
-				print "unexpected character", c
-				exit(-1)
+			assert c.isspace(), "unexpected character %r" % c
 
 		return ""
 
@@ -120,24 +118,37 @@ class Parser(Lexer):
 		prog = Node("program")
 
 		while self.tok:
-			if self.tok == "id":
-				func = Node("func")
-				func.name = self.name
 
+			# read type and name
+			t = self.name
+			self.match("id")
+			n = self.name
+			self.match("id")
+
+			# function
+			if self.tok == "(":
 				self.next()
-				self.match('(')
+				node = Node("func")
+				assert t in ("void", "int"), "invalid type"
+				node.t = t
+				node.name = n
 				# TODO: arguments
-				self.match(')')
-				if self.tok != '{':
-					print "no function block"
-					exit(1)
+				self.match(")")
+				assert self.tok == "{", "no function block"
 
-				func.add(self.stmt())
-				prog.add(func)
+				node.add(self.stmt())
+				prog.add(node)
 				continue
 
-			print "error parsing program"
-			exit(1)
+			# variable
+			assert t in ("int"), "invalid type"
+			node = Node("var")
+			node.t = t
+			node.name = n
+			self.match(";")
+			prog.add(node)
+			continue
+
 		return prog
 
 	def stmt(self):
@@ -155,7 +166,7 @@ class Parser(Lexer):
 			return node
 		else:
 			node = self.expr()
-			self.match(';')
+			self.match(";")
 			return node
 
 	def expr(self, level=0):
@@ -180,18 +191,17 @@ class Parser(Lexer):
 			node = Node("not").add(self.expr(99))
 		elif self.tok == "id":
 			self.next()
-			if self.tok == '(':
+			if self.tok == "(":
 				node = Node("call")
 				node.name = self.name
 				self.next()
 				# TODO: args
-				self.match(')')
+				self.match(")")
 			else:
-				node = Node("var")
+				node = Node("use")
 				node.name = self.name
 		else:
-			print "bad expression '%s'" % self.tok
-			exit(1)
+			assert False, "bad expression %r" % self.tok
 
 		# infix stuff
 		while self.tok in INFIX_LEVEL and INFIX_LEVEL[self.tok] >= level:
@@ -201,16 +211,19 @@ class Parser(Lexer):
 		return node
 
 	def match(self, tok):
-		if tok != self.tok:
-			print "unexpected token '%s' (should be '%s')" & (tok, self.tok)
-			exit(1)
+		assert tok == self.tok, "unexpected token %r (should be %r)" % (tok, self.tok)
 		self.next()
 
+
+
+def check_names(ast):
+	print "ok"
 
 
 if __name__ == "__main__":
 
 	code = file("test.c").read()
 	ast = Parser(code).parse()
+	check_names(ast)
 	ast.pretty_print()
 
