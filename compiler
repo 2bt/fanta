@@ -6,6 +6,7 @@ class Node:
 	def __init__(self, type):
 		self.type = type
 		self.kids = []
+		self.parent = None
 
 	def add(self, kid):
 		kid.parent = self
@@ -216,14 +217,35 @@ class Parser(Lexer):
 
 
 
-def check_names(ast):
-	print "ok"
+def resolve_names(node):
+	for k in node.kids: resolve_names(k)
+
+	if node.type == "use":
+		n = node
+		while n.parent:
+			kid = n
+			n = n.parent
+		for k in n.kids:
+			assert k != kid, "use of undefined variable %r" % node.name
+			if k.type == "var" and k.name == node.name:
+				node.var = k
+				break
+
+	if node.type == "call":
+		n = node
+		while n.parent: n = n.parent
+		for k in n.kids:
+			if k.type == "func" and k.name == node.name:
+				node.var = k
+				break
+		else:
+			assert False, "call of undefined function %r" % node.name
 
 
 if __name__ == "__main__":
 
 	code = file("test.c").read()
 	ast = Parser(code).parse()
-	check_names(ast)
+	resolve_names(ast)
 	ast.pretty_print()
 
