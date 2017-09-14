@@ -1,28 +1,5 @@
 #!/usr/bin/python
 
-
-class Node:
-
-	def __init__(self, type):
-		self.type = type
-		self.kids = []
-		self.parent = None
-
-	def add(self, kid):
-		kid.parent = self
-		self.kids.append(kid)
-		return self
-
-	def pretty_print(self, indent=0):
-		line = " " * indent + self.type
-		if hasattr(self, "name"):   line += " %r" % self.name
-		if hasattr(self, "number"): line += " %d" % self.number
-		print line
-		for k in self.kids:
-			k.pretty_print(indent + 1)
-
-
-
 # operators in precedence order
 INFIX_LEVEL = {
 	"=":   0,
@@ -43,6 +20,45 @@ INFIX_LEVEL = {
 	"/":  16,
 	"%":  16,
 }
+
+STMT_TYPES = [
+	"block",
+	"return",
+]
+
+EXPR_TYPES = INFIX_LEVEL.keys() + [
+	"number",
+	"neg",
+	"not",
+	"call",
+	"use",
+]
+
+
+class Node:
+
+	def __init__(self, type):
+		self.type = type
+		self.kids = []
+		self.parent = None
+
+	def add(self, kid):
+		kid.parent = self
+		self.kids.append(kid)
+		return self
+
+	def pretty_print(self, indent=0):
+		line = " " * indent + self.type
+		if hasattr(self, "name"):   line += " %r" % self.name
+		if hasattr(self, "number"): line += " %d" % self.number
+		if hasattr(self, "t"): line += " t=%s" % self.t
+		print line
+		for k in self.kids:
+			k.pretty_print(indent + 1)
+
+	def is_stmt(self): return self.type in STMT_TYPES
+	def is_expr(self): return self.type in EXPR_TYPES
+
 
 KEYWORDS = [
 	"return",
@@ -231,15 +247,25 @@ def resolve_names(node):
 				node.var = k
 				break
 
-	if node.type == "call":
+	elif node.type == "call":
 		n = node
 		while n.parent: n = n.parent
 		for k in n.kids:
 			if k.type == "func" and k.name == node.name:
-				node.var = k
+				node.func = k
 				break
 		else:
 			assert False, "call of undefined function %r" % node.name
+
+
+def check_types(node):
+	for k in node.kids: check_types(k)
+	if not node.is_expr(): return
+
+	if   node.type == "number": node.t = "int"
+	elif node.type == "use":    node.t = node.var.t
+	elif node.type == "call":   node.t = node.func.t
+	#...
 
 
 if __name__ == "__main__":
@@ -247,5 +273,6 @@ if __name__ == "__main__":
 	code = file("test.c").read()
 	ast = Parser(code).parse()
 	resolve_names(ast)
+	check_types(ast)
 	ast.pretty_print()
 
