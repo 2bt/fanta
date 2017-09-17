@@ -290,8 +290,11 @@ def compile(prog):
 		if type(b) == int: bytecode.append(b)
 		else: bytecode.append(OT[b])
 
+	linking = []
+
 	def cmpl(node):
 		if node.type == "func":
+			node.address = len(bytecode)
 			blk = node.kids[0]
 			cmpl(blk)
 			if not blk.kids or blk.kids[-1].type != "return": emit("RET")
@@ -310,7 +313,8 @@ def compile(prog):
 
 		elif node.type == "call":
 			emit("CALL")
-			emit(888)
+			linking.append((node.func, len(bytecode)))
+			emit(0)
 
 		elif node.type == "=":
 			cmpl(node.kids[0])
@@ -340,6 +344,9 @@ def compile(prog):
 			cmpl(k)
 		else:
 			assert False
+
+	for n, a in linking:
+		bytecode[a] = n.address
 
 	return bytecode
 
