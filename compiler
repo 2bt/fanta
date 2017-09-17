@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import struct
 
 # operators in precedence order
 INFIX_LEVEL = {
@@ -268,6 +269,81 @@ def check_types(node):
 	#...
 
 
+OPCODES = [
+    "IMM", "LI", "SI", "PUSH",
+    "JMP", "JZ", "JNZ", "CALL", "RET",
+    "INC", "DEC", "NOT", "NEG",
+    #"OR", "XOR", "AND", "EQ", "NE", "LT", "LE", "GT", "GE", "SHL", "SHR", "ADD", "SUB", "MUL", "DIV", "MOD",
+    "|", "^", "&", "==", "!=", "<", "<=", ">", ">=", "<<", ">>", "+", "-", "*", "/", "%",
+]
+
+
+
+OT = dict((o, i) for i, o in enumerate(OPCODES))
+
+def compile(prog):
+	assert prog.type == "program"
+
+	var_offset = 0
+	bytecode = []
+	def emit(b):
+		if type(b) == int: bytecode.append(b)
+		else: bytecode.append(OT[b])
+
+	def cmpl(node):
+		if node.type == "func":
+			blk = node.kids[0]
+			cmpl(blk)
+			if not blk.kids or blk.kids[-1].type != "return": emit("RET")
+
+		elif node.type == "block":
+			for k in node.kids: cmpl(k)
+
+		elif node.type == "return":
+			if node.kids: cmpl(node.kids[0])
+			emit("RET")
+
+		elif node.type == "use":
+			emit("IMM")
+			emit(node.var.address)
+			emit("LI")
+
+		elif node.type == "call":
+			emit("CALL")
+			emit(888)
+
+		elif node.type == "=":
+			cmpl(node.kids[0])
+			bytecode.pop()
+			emit("PUSH")
+			cmpl(node.kids[1])
+			emit("SI")
+
+		elif node.type == "number":
+			emit("IMM")
+			emit(node.number)
+
+		elif node.type in OPCODES:
+			cmpl(node.kids[0])
+			emit("PUSH")
+			cmpl(node.kids[1])
+			emit(OPCODES.index(node.type))
+
+		else:
+			assert False, "TODO: compile node type %r" % node.type
+
+	for k in prog.kids:
+		if k.type == "var":
+			k.address = var_offset
+			var_offset += 1
+		elif k.type == "func":
+			cmpl(k)
+		else:
+			assert False
+
+	return bytecode
+
+
 if __name__ == "__main__":
 
 	code = file("test.c").read()
@@ -275,4 +351,9 @@ if __name__ == "__main__":
 	resolve_names(ast)
 	check_types(ast)
 	ast.pretty_print()
+
+	bytecode = compile(ast)
+	print bytecode
+
+	file("bytecode", "w").write("".join(struct.pack("@i", x) for x in bytecode))
 
