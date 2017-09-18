@@ -52,7 +52,6 @@ class Node:
 		line = " " * indent + self.type
 		if hasattr(self, "name"):   line += " %r" % self.name
 		if hasattr(self, "number"): line += " %d" % self.number
-		if hasattr(self, "t"): line += " t=%s" % self.t
 		print line
 		for k in self.kids:
 			k.pretty_print(indent + 1)
@@ -261,12 +260,23 @@ def resolve_names(node):
 
 def check_types(node):
 	for k in node.kids: check_types(k)
-	if not node.is_expr(): return
 
+	if node.type == "return":
+		t = node.kids[0].t if node.kids else "void"
+		n = node.parent
+		while n.type != "func": n = n.parent
+		assert n.t == t, "return type mismatch"
+		# TODO: check for missing return statement somehow
+
+	if not node.is_expr(): return
 	if   node.type == "number": node.t = "int"
 	elif node.type == "use":    node.t = node.var.t
 	elif node.type == "call":   node.t = node.func.t
-	#...
+	else:
+		node.t = node.kids[0].t
+		# all children must have the same expression type
+		assert all(k.t == node.t for k in node.kids), "type mismatch"
+		assert node.t != "void"
 
 
 OPCODES = [

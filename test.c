@@ -6,9 +6,9 @@ int i;
 
 void main() {
    f = 5;
+   foo();
    g = f() * f() * g();
-   i = 10 + 3 * 4 + g();
-   i = 2;
+   i = 10 + 3 * 4;
 }
 
 
@@ -17,4 +17,10 @@ int f() {
    return f;
 }
 
-void g() {}
+int g() {
+   return 1;
+}
+
+void foo() {
+
+}
