@@ -65,6 +65,8 @@ KEYWORDS = [
 	"if",
 	"else",
 	"while",
+	"break",
+	"continue"
 ]
 
 
@@ -168,19 +170,35 @@ class Parser(Lexer):
 
 		return prog
 
+
 	def stmt(self):
+
 		if self.tok == "return":
 			self.next()
 			node = Node("return")
 			if self.tok != ";": node.add(self.expr())
 			self.match(";")
 			return node
+
+		elif self.tok == "if":
+			self.next()
+			node = Node("if")
+			self.match("(")
+			node.add(self.expr())
+			self.match(")")
+			node.add(self.stmt())
+			if self.tok == "else":
+				self.next()
+				node.add(self.stmt())
+			return node
+
 		elif self.tok == "{":
 			self.next()
 			node = Node("block")
 			while self.tok != "}": node.add(self.stmt())
 			self.next()
 			return node
+
 		else:
 			node = self.expr()
 			self.match(";")
@@ -316,6 +334,21 @@ def compile(prog):
 			if node.kids: cmpl(node.kids[0])
 			emit("RET")
 
+		elif node.type == "if":
+			cmpl(node.kids[0])
+			emit("JZ")
+			a = len(bytecode)
+			emit(0)
+			cmpl(node.kids[1])
+			# else
+			if len(node.kids) == 3:
+				bytecode[a] = len(bytecode) + 2
+				emit("JMP")
+				a = len(bytecode)
+				emit(0)
+				cmpl(node.kids[2])
+			bytecode[a] = len(bytecode)
+
 		elif node.type == "use":
 			emit("IMM")
 			emit(node.var.address)
@@ -336,6 +369,12 @@ def compile(prog):
 		elif node.type == "number":
 			emit("IMM")
 			emit(node.number)
+
+		elif node.type == "neg":
+			emit("NEG")
+
+		elif node.type == "not":
+			emit("NOT")
 
 		elif node.type in OPCODES:
 			cmpl(node.kids[0])
