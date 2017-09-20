@@ -55,6 +55,7 @@ void run(const std::vector<int>& code, int pc) {
         }
     }
 
+    printf("%d\n", ax);
     printf("RAM:");
     for (int i = 0; i < 16; ++i) printf(" %d", mem[i]);
     printf("\n");
