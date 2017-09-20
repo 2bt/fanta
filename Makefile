@@ -1,2 +1,7 @@
-all:
-	g++ -Wall -Og -g main.cpp
+all: vm bytecode
+
+vm: vm.cpp Makefile
+	g++ -Wall -Og -g vm.cpp -o vm
+
+bytecode:
+	./compiler

@@ -65,6 +65,7 @@ KEYWORDS = [
 	"if",
 	"else",
 	"while",
+	"for",
 	"break",
 	"continue"
 ]
@@ -178,6 +179,34 @@ class Parser(Lexer):
 			node = Node("return")
 			if self.tok != ";": node.add(self.expr())
 			self.match(";")
+			return node
+
+		elif self.tok == "for":
+			self.next()
+			# fake for loop by using a while loop
+			node = Node("block")
+			self.match("(")
+			node.add(self.expr())
+			self.match(";")
+			w = Node("while")
+			node.add(w)
+			w.add(self.expr())
+			self.match(";")
+			i = self.expr()
+			self.match(")")
+			b = Node("block")
+			w.add(b)
+			b.add(self.stmt())
+			b.add(i)
+			return node
+
+		elif self.tok == "while":
+			self.next()
+			node = Node("while")
+			self.match("(")
+			node.add(self.expr())
+			self.match(")")
+			node.add(self.stmt())
 			return node
 
 		elif self.tok == "if":
@@ -305,6 +334,14 @@ OPCODES = [
     "|", "^", "&", "==", "!=", "<", "<=", ">", ">=", "<<", ">>", "+", "-", "*", "/", "%",
 ]
 
+OPCODES_ = [
+    "IMM", "LI", "SI", "PUSH",
+    "JMP", "JZ", "JNZ", "CALL", "RET",
+    "INC", "DEC", "NOT", "NEG",
+    "OR", "XOR", "AND", "EQ", "NE", "LT", "LE", "GT", "GE", "SHL", "SHR", "ADD", "SUB", "MUL", "DIV", "MOD",
+    #"|", "^", "&", "==", "!=", "<", "<=", ">", ">=", "<<", ">>", "+", "-", "*", "/", "%",
+]
+
 
 
 OT = dict((o, i) for i, o in enumerate(OPCODES))
@@ -333,6 +370,17 @@ def compile(prog):
 		elif node.type == "return":
 			if node.kids: cmpl(node.kids[0])
 			emit("RET")
+
+		elif node.type == "while":
+			s = len(bytecode)
+			cmpl(node.kids[0])
+			emit("JZ")
+			a = len(bytecode)
+			emit(0)
+			cmpl(node.kids[1])
+			emit("JMP")
+			emit(s)
+			bytecode[a] = len(bytecode)
 
 		elif node.type == "if":
 			cmpl(node.kids[0])
@@ -409,7 +457,14 @@ if __name__ == "__main__":
 	ast.pretty_print()
 
 	bytecode = compile(ast)
-	print bytecode
-
 	file("bytecode", "w").write("".join(struct.pack("@i", x) for x in bytecode))
 
+	i = 0
+	while i < len(bytecode):
+		b = OPCODES_[bytecode[i]]
+		print "%3d\t%s\t" % (i, b),
+		i += 1
+		if b in ["JMP", "JZ", "JNZ", "IMM"]:
+			print bytecode[i],
+			i += 1
+		print
