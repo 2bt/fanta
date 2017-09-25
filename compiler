@@ -115,8 +115,9 @@ class Lexer:
 
 			if c in "<>":
 				if self.char() not in c + "=": return c
+				c += self.char()
 				self._pos += 1
-				return c + self.char()
+				return c
 
 			if c in "!=":
 				if self.char() != "=": return c
