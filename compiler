@@ -56,8 +56,8 @@ class Node:
 		for k in self.kids:
 			k.pretty_print(indent + 1)
 
-	def is_stmt(self): return self.type in STMT_TYPES
-	def is_expr(self): return self.type in EXPR_TYPES
+	def is_statement(self): return self.type in STMT_TYPES
+	def is_expression(self): return self.type in EXPR_TYPES
 
 
 KEYWORDS = [
@@ -67,7 +67,8 @@ KEYWORDS = [
 	"while",
 	"for",
 	"break",
-	"continue"
+	"continue",
+	"enum"
 ]
 
 
@@ -82,9 +83,11 @@ class Lexer:
 
 		self.next()
 
-	def next(self): self.tok = self.scan()
+	def next(self):
+		self.tok = self.scan()
 
-	def char(self): return self._code[self._pos : self._pos + 1]
+	def char(self):
+		return self._code[self._pos : self._pos + 1]
 
 	def scan(self):
 		while self._pos < len(self._code):
@@ -106,7 +109,7 @@ class Lexer:
 					self._pos += 1
 				return "number"
 
-			if c in "+-*%(){};~": return c
+			if c in "+-*%(){};~,": return c
 			if c == "/":
 				if self.char() != '/': return "/";
 				while self._pos < len(self._code) and self._code[self._pos] != "\n":
@@ -129,16 +132,46 @@ class Lexer:
 		return ""
 
 
+class Datatype:
+	def __init__(self, type, length=None):
+		self.type   = type
+		self.length = length
+
+	def __eq__(self, other):
+		return self.__dict__ == other.__dict__
+
+
 
 class Parser(Lexer):
 	def __init__(self, code):
 		Lexer.__init__(self, code)
+		self.enums = {}
 
 	def parse(self):
-
 		prog = Node("program")
-
 		while self.tok:
+
+			# enum constants
+			if self.tok == "enum":
+				self.next()
+				self.match("{")
+				i = 0
+				while self.tok == "id":
+					n = self.name
+					self.next()
+					assert n not in self.enums
+					if self.tok == "=":
+						self.next()
+						# TODO: allow for const expressions
+						self.match("number")
+						i = self.number
+					self.enums[n] = i
+					i += 1
+					if self.tok != ",": break
+					self.match(",")
+				self.match("}")
+				self.match(";")
+				continue
 
 			# read type and name
 			t = self.name
@@ -157,7 +190,7 @@ class Parser(Lexer):
 				self.match(")")
 				assert self.tok == "{", "no function block"
 
-				node.add(self.stmt())
+				node.add(self.statement())
 				prog.add(node)
 				continue
 
@@ -172,13 +205,18 @@ class Parser(Lexer):
 
 		return prog
 
+	def dttp(self):
+		t = self.name
+		self.match("id")
 
-	def stmt(self):
+
+
+	def statement(self):
 
 		if self.tok == "return":
 			self.next()
 			node = Node("return")
-			if self.tok != ";": node.add(self.expr())
+			if self.tok != ";": node.add(self.expression())
 			self.match(";")
 			return node
 
@@ -187,17 +225,17 @@ class Parser(Lexer):
 			# fake for loop by using a while loop
 			node = Node("block")
 			self.match("(")
-			node.add(self.expr())
+			node.add(self.expression())
 			self.match(";")
 			w = Node("while")
 			node.add(w)
-			w.add(self.expr())
+			w.add(self.expression())
 			self.match(";")
-			i = self.expr()
+			i = self.expression()
 			self.match(")")
 			b = Node("block")
 			w.add(b)
-			b.add(self.stmt())
+			b.add(self.statement())
 			b.add(i)
 			return node
 
@@ -205,36 +243,36 @@ class Parser(Lexer):
 			self.next()
 			node = Node("while")
 			self.match("(")
-			node.add(self.expr())
+			node.add(self.expression())
 			self.match(")")
-			node.add(self.stmt())
+			node.add(self.statement())
 			return node
 
 		elif self.tok == "if":
 			self.next()
 			node = Node("if")
 			self.match("(")
-			node.add(self.expr())
+			node.add(self.expression())
 			self.match(")")
-			node.add(self.stmt())
+			node.add(self.statement())
 			if self.tok == "else":
 				self.next()
-				node.add(self.stmt())
+				node.add(self.statement())
 			return node
 
 		elif self.tok == "{":
 			self.next()
 			node = Node("block")
-			while self.tok != "}": node.add(self.stmt())
+			while self.tok != "}": node.add(self.statement())
 			self.next()
 			return node
 
 		else:
-			node = self.expr()
+			node = self.expression()
 			self.match(";")
 			return node
 
-	def expr(self, level=0):
+	def expression(self, level=0):
 
 		# unary stuff
 		if self.tok == "number":
@@ -243,20 +281,24 @@ class Parser(Lexer):
 			node.number = self.number
 		elif self.tok == "+":
 			self.next()
-			node = self.expr(99)
+			node = self.expression(99)
 		elif self.tok == "-":
 			self.next()
-			node = Node("neg").add(self.expr(99))
+			node = Node("neg").add(self.expression(99))
 		elif self.tok == "(":
 			self.next()
-			node = self.expr()
+			node = self.expression()
 			self.match(")")
 		elif self.tok == "!":
 			self.next()
-			node = Node("not").add(self.expr(99))
+			node = Node("not").add(self.expression(99))
 		elif self.tok == "id":
 			self.next()
-			if self.tok == "(":
+
+			if self.name in self.enums:
+				node = Node("number")
+				node.number = self.enums[self.name]
+			elif self.tok == "(":
 				node = Node("call")
 				node.name = self.name
 				self.next()
@@ -272,7 +314,7 @@ class Parser(Lexer):
 		while self.tok in INFIX_LEVEL and INFIX_LEVEL[self.tok] >= level:
 			tok = self.tok
 			self.next()
-			node = Node(tok).add(node).add(self.expr(INFIX_LEVEL[tok] + 1))
+			node = Node(tok).add(node).add(self.expression(INFIX_LEVEL[tok] + 1))
 		return node
 
 	def match(self, tok):
@@ -316,7 +358,7 @@ def check_types(node):
 		assert n.t == t, "return type mismatch"
 		# TODO: check for missing return statement somehow
 
-	if not node.is_expr(): return
+	if not node.is_expression(): return
 	if   node.type == "number": node.t = "int"
 	elif node.type == "use":    node.t = node.var.t
 	elif node.type == "call":   node.t = node.func.t
