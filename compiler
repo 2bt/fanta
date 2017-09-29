@@ -74,13 +74,13 @@ KEYWORDS = [
 
 class Lexer:
 	def __init__(self, code):
-		self._code = code
-		self._pos  = 0
-
-		self.tok  = ""
-		self.name = ""
-		self.number  = 0
-
+		self._code  = code
+		self._pos   = 0
+		self._row   = 0
+		self._col   = 0
+		self.tok    = ""
+		self.name   = ""
+		self.number = 0
 		self.next()
 
 	def next(self):
@@ -89,15 +89,23 @@ class Lexer:
 	def char(self):
 		return self._code[self._pos : self._pos + 1]
 
+	def next_char(self):
+		c = self.char()
+		if not c: return
+		if c == "\n":
+			self._row += 1
+			self._col = 0
+		self._pos += 1
+
 	def scan(self):
 		while self._pos < len(self._code):
-			c = self._code[self._pos]
+			c = self.char()
 			self._pos += 1
 
 			if c.isalpha() or c == '_':
 				self.name = c
 				while self.char().isalnum() or self.char() == '_':
-					self.name += self._code[self._pos]
+					self.name += self.char()
 					self._pos += 1
 				if self.name in KEYWORDS: return self.name
 				return "id"
@@ -105,14 +113,14 @@ class Lexer:
 			if c.isdigit():
 				self.number = int(c)
 				while self.char().isdigit():
-					self.number = self.number * 10 + int(self._code[self._pos])
+					self.number = self.number * 10 + int(self.char())
 					self._pos += 1
 				return "number"
 
 			if c in "+-*%(){};~,": return c
 			if c == "/":
 				if self.char() != '/': return "/";
-				while self._pos < len(self._code) and self._code[self._pos] != "\n":
+				while self.char() and self.char() != "\n":
 					self._pos += 1
 				continue
 
