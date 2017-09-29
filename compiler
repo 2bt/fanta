@@ -369,6 +369,27 @@ def check_types(node):
 		assert node.t != "void"
 
 
+def fold_constants(node):
+	for k in node.kids: fold_constants(k)
+	if all(k.type == "number" for k in node.kids):
+		if node.type in [
+		"|", "^", "&", "==", "!=", "<", "<=", ">",
+		">=", "<<", ">>", "+", "-", "*", "/", "%"]:
+			node.number = +eval("%d%s%d" % (
+				node.kids[0].number,
+				node.type,
+				node.kids[1].number))
+			node.type = "number"
+			node.kids = []
+		elif node.type == "neg":
+			node.number = -node.kids[0].number
+			node.type = "number"
+			node.kids = []
+		elif node.type == "not":
+			node.number = +(not node.kids[0].number)
+			node.type = "number"
+			node.kids = []
+
 OPCODES = [
     "IMM", "LI", "SI", "PUSH",
     "JMP", "JZ", "JNZ", "CALL", "RET",
@@ -497,6 +518,7 @@ if __name__ == "__main__":
 	ast = Parser(code).parse()
 	resolve_names(ast)
 	check_types(ast)
+	fold_constants(ast)
 	ast.pretty_print()
 
 	bytecode = compile(ast)
