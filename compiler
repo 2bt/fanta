@@ -75,55 +75,71 @@ class Lexer:
 	def __init__(self, code):
 		self._code = code
 		self._pos  = 0
+		self._row  = 1
+		self._col  = 1
 
 		self.tok  = ""
 		self.name = ""
-		self.number  = 0
+		self.number = 0
 
 		self.next()
 
-	def next(self): self.tok = self.scan()
+	def error(self, msg = ""):
+		print "error at %d:%d: " % (self._last_row, self._last_col) + msg
+		exit(1)
 
-	def char(self): return self._code[self._pos : self._pos + 1]
+	def next(self):
+		self.tok = self.scan()
+
+	def char(self):
+		return self._code[self._pos : self._pos + 1]
+
+	def next_char(self):
+		c = self.char()
+		if not c: return ""
+		if self._code[self._pos] == "\n":
+			self._row += 1
+			self._col = 1
+		else:
+			self._col += 1
+		self._pos += 1
+		return c
 
 	def scan(self):
-		while self._pos < len(self._code):
-			c = self._code[self._pos]
-			self._pos += 1
+		while self.char():
+			self._last_row = self._row
+			self._last_col = self._col
+			c = self.next_char()
 
 			if c.isalpha() or c == '_':
 				self.name = c
 				while self.char().isalnum() or self.char() == '_':
-					self.name += self._code[self._pos]
-					self._pos += 1
+					self.name += self.next_char()
 				if self.name in KEYWORDS: return self.name
 				return "id"
 
 			if c.isdigit():
 				self.number = int(c)
 				while self.char().isdigit():
-					self.number = self.number * 10 + int(self._code[self._pos])
-					self._pos += 1
+					self.number = self.number * 10 + int(self.next_char())
 				return "number"
 
 			if c in "+-*%(){};~": return c
 			if c == "/":
 				if self.char() != '/': return "/";
-				while self._pos < len(self._code) and self._code[self._pos] != "\n":
-					self._pos += 1
+				while self.char() and self.char() != "\n": self.next_char()
 				continue
 
 			if c in "<>":
 				if self.char() not in c + "=": return c
-				self._pos += 1
-				return c + self.char()
+				return c + self.next_char()
 
 			if c in "!=":
 				if self.char() != "=": return c
-				self._pos += 1
-				return c + "="
+				return c + self.next_char()
 
-			assert c.isspace(), "unexpected character %r" % c
+			if not c.isspace():
+				self.error("unexpected character %r" % c)
 
 		return ""
 
@@ -149,19 +165,19 @@ class Parser(Lexer):
 			if self.tok == "(":
 				self.next()
 				node = Node("func")
-				assert t in ("void", "int"), "invalid type"
+				if t not in ("void", "int"): self.error("invalid type")
 				node.t = t
 				node.name = n
 				# TODO: arguments
 				self.match(")")
-				assert self.tok == "{", "no function block"
+				if self.tok != "{": self.error("no function block")
 
 				node.add(self.stmt())
 				prog.add(node)
 				continue
 
 			# variable
-			assert t in ("int"), "invalid type"
+			if t not in ("int"): self.error("invalid type")
 			node = Node("var")
 			node.t = t
 			node.name = n
@@ -265,7 +281,7 @@ class Parser(Lexer):
 				node = Node("use")
 				node.name = self.name
 		else:
-			assert False, "bad expression %r" % self.tok
+			self.error("bad expression %r" % self.tok)
 
 		# infix stuff
 		while self.tok in INFIX_LEVEL and INFIX_LEVEL[self.tok] >= level:
@@ -275,7 +291,7 @@ class Parser(Lexer):
 		return node
 
 	def match(self, tok):
-		assert tok == self.tok, "unexpected token %r (should be %r)" % (tok, self.tok)
+		if tok != self.tok: self.error("unexpected token %r (should be %r)" % (self.tok, tok))
 		self.next()
 
 
@@ -345,6 +361,7 @@ OPCODES_ = [
 
 
 OT = dict((o, i) for i, o in enumerate(OPCODES))
+
 
 def compile(prog):
 	assert prog.type == "program"
