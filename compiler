@@ -67,7 +67,8 @@ KEYWORDS = [
 	"while",
 	"for",
 	"break",
-	"continue"
+	"continue",
+	"enum",
 ]
 
 
@@ -124,7 +125,7 @@ class Lexer:
 					self.number = self.number * 10 + int(self.next_char())
 				return "number"
 
-			if c in "+-*%(){};~": return c
+			if c in "+-*%(){};~,": return c
 			if c == "/":
 				if self.char() != '/': return "/";
 				while self.char() and self.char() != "\n": self.next_char()
@@ -151,9 +152,31 @@ class Parser(Lexer):
 
 	def parse(self):
 
+		self.enum = {}
 		prog = Node("program")
 
 		while self.tok:
+
+			if self.tok == "enum":
+				self.next()
+				self.match("{")
+				i = 0
+				while self.tok != "}":
+					n = self.name
+					self.match("id")
+					if self.tok == "=":
+						self.next()
+						self.match("number")
+						i = self.number
+					self.enum[n] = i
+					i += 1
+					if self.tok == ",":
+						self.next()
+						continue
+					break
+				self.match("}")
+				self.match(";")
+
 
 			# read type and name
 			t = self.name
@@ -278,8 +301,12 @@ class Parser(Lexer):
 				# TODO: args
 				self.match(")")
 			else:
-				node = Node("use")
-				node.name = self.name
+				if self.name in self.enum:
+					node = Node("number")
+					node.number = self.enum[self.name]
+				else:
+					node = Node("use")
+					node.name = self.name
 		else:
 			self.error("bad expression %r" % self.tok)
 
@@ -342,6 +369,15 @@ def check_types(node):
 		assert node.t != "void"
 
 
+def fold_constants(node):
+	for k in node.kids: fold_constants(k)
+	if not all(k.type == "number" for k in node.kids): return
+	if node.type in ("+", "-", "*", "/", "%"):
+		node.number = eval("%d %s %d" % (node.kids[0].number, node.type, node.kids[1].number))
+		node.type = "number"
+	# TODO: handle other operators
+
+
 OPCODES = [
     "IMM", "LI", "SI", "PUSH",
     "JMP", "JZ", "JNZ", "CALL", "RET",
@@ -390,14 +426,19 @@ def compile(prog):
 
 		elif node.type == "while":
 			s = len(bytecode)
-			cmpl(node.kids[0])
-			emit("JZ")
-			a = len(bytecode)
-			emit(0)
+			if node.kids[0].type == "number" and node.kids[0].number != 0:
+				# condition is always true
+				a = None
+			else:
+				cmpl(node.kids[0])
+				emit("JZ")
+				a = len(bytecode)
+				emit(0)
 			cmpl(node.kids[1])
 			emit("JMP")
 			emit(s)
-			bytecode[a] = len(bytecode)
+			if a:
+				bytecode[a] = len(bytecode)
 
 		elif node.type == "if":
 			cmpl(node.kids[0])
@@ -425,6 +466,7 @@ def compile(prog):
 			emit(0)
 
 		elif node.type == "=":
+			# TODO: lvalue check for node.kids[0]
 			cmpl(node.kids[0])
 			bytecode.pop()
 			emit("PUSH")
@@ -471,6 +513,7 @@ if __name__ == "__main__":
 	ast = Parser(code).parse()
 	resolve_names(ast)
 	check_types(ast)
+	fold_constants(ast)
 	ast.pretty_print()
 
 	bytecode = compile(ast)
