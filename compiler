@@ -56,6 +56,9 @@ class Node:
 		for k in self.kids:
 			k.pretty_print(indent + 1)
 
+	def is_lvalue(self):
+		return self.type == "use"
+
 	def is_stmt(self): return self.type in STMT_TYPES
 	def is_expr(self): return self.type in EXPR_TYPES
 
@@ -466,7 +469,8 @@ def compile(prog):
 			emit(0)
 
 		elif node.type == "=":
-			# TODO: lvalue check for node.kids[0]
+			# lvalue check for node.kids[0]
+			assert node.kids[0].is_lvalue()
 			cmpl(node.kids[0])
 			bytecode.pop()
 			emit("PUSH")
