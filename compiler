@@ -75,110 +75,124 @@ KEYWORDS = [
 ]
 
 
+def error(pos, msg = ""):
+	print "error at %d:%d: " % (pos.row, self.col) + msg
+	exit(1)
+
+
+class Token:
+	pass
+
+
 class Lexer:
-	def __init__(self, code):
-		self._code = code
-		self._pos  = 0
-		self._row  = 1
-		self._col  = 1
+#public:
+	def __init__(self, file):
+		self.file = file
+		self.row  = 1
+		self.col  = 0
+		self.char = None
+		self.next_char()
 
-		self.tok  = ""
-		self.name = ""
-		self.number = 0
+	def next_token(self):
+		self.token.type = self.scan()
+		return self.token
 
-		self.next()
-
-	def error(self, msg = ""):
-		print "error at %d:%d: " % (self._last_row, self._last_col) + msg
-		exit(1)
-
-	def next(self):
-		self.tok = self.scan()
-
-	def char(self):
-		return self._code[self._pos : self._pos + 1]
-
+#private:
 	def next_char(self):
-		c = self.char()
-		if not c: return ""
-		if self._code[self._pos] == "\n":
-			self._row += 1
-			self._col = 1
-		else:
-			self._col += 1
-		self._pos += 1
+		c = self.char
+		self.char = self.file.read(1)
+		if self.char == "\n":
+			self.row += 1
+			self.col = 1
+		elif self.char:
+			self.col += 1
 		return c
 
 	def scan(self):
-		while self.char():
-			self._last_row = self._row
-			self._last_col = self._col
+		while self.char:
+			token = Token()
+			token.row = self.row
+			token.col = self.col
+			self.token = token
+
 			c = self.next_char()
 
 			if c.isalpha() or c == '_':
-				self.name = c
-				while self.char().isalnum() or self.char() == '_':
-					self.name += self.next_char()
-				if self.name in KEYWORDS: return self.name
+				token.name = c
+				while self.char.isalnum() or self.char == '_':
+					token.name += self.next_char()
+				if token.name in KEYWORDS: return token.name
 				return "id"
 
 			if c.isdigit():
-				self.number = int(c)
-				while self.char().isdigit():
-					self.number = self.number * 10 + int(self.next_char())
+				token.number = int(c)
+				while self.char.isdigit():
+					token.number = token.number * 10 + int(self.next_char())
 				return "number"
 
 			if c in "+-*%(){};~,": return c
 			if c == "/":
-				if self.char() != '/': return "/";
-				while self.char() and self.char() != "\n": self.next_char()
+				if self.char != '/': return "/";
+				while self.char and self.char != "\n": self.next_char()
 				continue
 
 			if c in "<>":
-				if self.char() not in c + "=": return c
+				if self.char not in c + "=": return c
 				return c + self.next_char()
 
 			if c in "!=":
-				if self.char() != "=": return c
+				if self.char != "=": return c
 				return c + self.next_char()
 
 			if not c.isspace():
-				self.error("unexpected character %r" % c)
+				error(self.token, "unexpected character %r" % c)
 
-		return ""
+		return None
 
 
 
-class Parser(Lexer):
-	def __init__(self, code):
-		Lexer.__init__(self, code)
+class Parser:
+	def __init__(self, file):
+		self.lexer = Lexer(file)
+
+	def next_token():
+		t = self.token
+		self.token = self.lexer.next_token()
+		return t
+
+	def match_token(self, type):
+		if type != self.token.type:
+			error(self.token, "unexpected token %r (should be %r)" % (self.token.type, type))
+		self.next_token()
 
 	def parse(self):
 
 		self.enum = {}
 		prog = Node("program")
 
-		while self.tok:
+		self.next_token()
 
-			if self.tok == "enum":
-				self.next()
-				self.match("{")
+		while self.token.type:
+
+			if self.token.type == "enum":
+				self.next_token()
+				self.match_token("{")
 				i = 0
-				while self.tok != "}":
-					n = self.name
-					self.match("id")
-					if self.tok == "=":
-						self.next()
-						self.match("number")
-						i = self.number
+				while self.token.type != "}":
+					n = self.token.name
+					self.match_token("id")
+					if self.token.type == "=":
+						self.next_token()
+						self.match_token("number")
+						i = self.token.number
 					self.enum[n] = i
 					i += 1
-					if self.tok == ",":
-						self.next()
+					if self.token.type == ",":
+						self.next_token()
 						continue
 					break
-				self.match("}")
-				self.match(";")
+				self.match_token("}")
+				self.match_token(";")
 
 
 			# read type and name
@@ -189,7 +203,7 @@ class Parser(Lexer):
 
 			# function
 			if self.tok == "(":
-				self.next()
+				self.lexer.next_tok()
 				node = Node("func")
 				if t not in ("void", "int"): self.error("invalid type")
 				node.t = t
@@ -217,14 +231,14 @@ class Parser(Lexer):
 	def stmt(self):
 
 		if self.tok == "return":
-			self.next()
+			self.lexer.next_tok()
 			node = Node("return")
 			if self.tok != ";": node.add(self.expr())
 			self.match(";")
 			return node
 
 		elif self.tok == "for":
-			self.next()
+			self.lexer.next_tok()
 			# fake for loop by using a while loop
 			node = Node("block")
 			self.match("(")
@@ -243,7 +257,7 @@ class Parser(Lexer):
 			return node
 
 		elif self.tok == "while":
-			self.next()
+			self.lexer.next_tok()
 			node = Node("while")
 			self.match("(")
 			node.add(self.expr())
@@ -252,22 +266,22 @@ class Parser(Lexer):
 			return node
 
 		elif self.tok == "if":
-			self.next()
+			self.lexer.next_tok()
 			node = Node("if")
 			self.match("(")
 			node.add(self.expr())
 			self.match(")")
 			node.add(self.stmt())
 			if self.tok == "else":
-				self.next()
+				self.lexer.next_tok()
 				node.add(self.stmt())
 			return node
 
 		elif self.tok == "{":
-			self.next()
+			self.lexer.next_tok()
 			node = Node("block")
 			while self.tok != "}": node.add(self.stmt())
-			self.next()
+			self.lexer.next_tok()
 			return node
 
 		else:
@@ -279,28 +293,28 @@ class Parser(Lexer):
 
 		# unary stuff
 		if self.tok == "number":
-			self.next()
+			self.lexer.next_tok()
 			node = Node("number")
 			node.number = self.number
 		elif self.tok == "+":
-			self.next()
+			self.lexer.next_tok()
 			node = self.expr(99)
 		elif self.tok == "-":
-			self.next()
+			self.lexer.next_tok()
 			node = Node("neg").add(self.expr(99))
 		elif self.tok == "(":
-			self.next()
+			self.lexer.next_tok()
 			node = self.expr()
 			self.match(")")
 		elif self.tok == "!":
-			self.next()
+			self.lexer.next_tok()
 			node = Node("not").add(self.expr(99))
 		elif self.tok == "id":
-			self.next()
+			self.lexer.next_tok()
 			if self.tok == "(":
 				node = Node("call")
 				node.name = self.name
-				self.next()
+				self.lexer.next_tok()
 				# TODO: args
 				self.match(")")
 			else:
@@ -316,13 +330,9 @@ class Parser(Lexer):
 		# infix stuff
 		while self.tok in INFIX_LEVEL and INFIX_LEVEL[self.tok] >= level:
 			tok = self.tok
-			self.next()
+			self.lexer.next_tok()
 			node = Node(tok).add(node).add(self.expr(INFIX_LEVEL[tok] + 1))
 		return node
-
-	def match(self, tok):
-		if tok != self.tok: self.error("unexpected token %r (should be %r)" % (self.tok, tok))
-		self.next()
 
 
 
@@ -513,8 +523,7 @@ def compile(prog):
 
 if __name__ == "__main__":
 
-	code = file("test.c").read()
-	ast = Parser(code).parse()
+	ast = Parser(open("test.c")).parse()
 	resolve_names(ast)
 	check_types(ast)
 	fold_constants(ast)
