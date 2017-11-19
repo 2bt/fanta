@@ -81,7 +81,8 @@ def error(pos, msg = ""):
 
 
 class Token:
-	pass
+	def __str__(self):
+		return repr(self.__dict__)
 
 
 class Lexer:
@@ -154,8 +155,9 @@ class Lexer:
 class Parser:
 	def __init__(self, file):
 		self.lexer = Lexer(file)
+		self.token = None
 
-	def next_token():
+	def next_token(self):
 		t = self.token
 		self.token = self.lexer.next_token()
 		return t
@@ -163,7 +165,7 @@ class Parser:
 	def match_token(self, type):
 		if type != self.token.type:
 			error(self.token, "unexpected token %r (should be %r)" % (self.token.type, type))
-		self.next_token()
+		return self.next_token()
 
 	def parse(self):
 
@@ -183,8 +185,7 @@ class Parser:
 					self.match_token("id")
 					if self.token.type == "=":
 						self.next_token()
-						self.match_token("number")
-						i = self.token.number
+						i = self.match_token("number").number
 					self.enum[n] = i
 					i += 1
 					if self.token.type == ",":
@@ -196,32 +197,30 @@ class Parser:
 
 
 			# read type and name
-			t = self.name
-			self.match("id")
-			n = self.name
-			self.match("id")
+			t = self.match_token("id")
+			n = self.match_token("id").name
 
 			# function
-			if self.tok == "(":
-				self.lexer.next_tok()
+			if self.token.type == "(":
+				self.next_token()
 				node = Node("func")
-				if t not in ("void", "int"): self.error("invalid type")
-				node.t = t
+				if t.name not in ("void", "int"): error(t, "invalid type")
+				node.t = t.name
 				node.name = n
 				# TODO: arguments
-				self.match(")")
-				if self.tok != "{": self.error("no function block")
+				self.match_token(")")
+				if self.token.type != "{": error(self.token, "no function block")
 
 				node.add(self.stmt())
 				prog.add(node)
 				continue
 
 			# variable
-			if t not in ("int"): self.error("invalid type")
+			if t.name not in ("int"): error(t, "invalid type")
 			node = Node("var")
-			node.t = t
+			node.t = t.name
 			node.name = n
-			self.match(";")
+			self.match_token(";")
 			prog.add(node)
 			continue
 
@@ -230,107 +229,106 @@ class Parser:
 
 	def stmt(self):
 
-		if self.tok == "return":
-			self.lexer.next_tok()
+		if self.token.type == "return":
+			self.next_token()
 			node = Node("return")
-			if self.tok != ";": node.add(self.expr())
-			self.match(";")
+			if self.token.type != ";": node.add(self.expr())
+			self.match_token(";")
 			return node
 
-		elif self.tok == "for":
-			self.lexer.next_tok()
+		elif self.token.type == "for":
+			self.next_token()
 			# fake for loop by using a while loop
 			node = Node("block")
-			self.match("(")
+			self.match_token("(")
 			node.add(self.expr())
-			self.match(";")
+			self.match_token(";")
 			w = Node("while")
 			node.add(w)
 			w.add(self.expr())
-			self.match(";")
+			self.match_token(";")
 			i = self.expr()
-			self.match(")")
+			self.match_token(")")
 			b = Node("block")
 			w.add(b)
 			b.add(self.stmt())
 			b.add(i)
 			return node
 
-		elif self.tok == "while":
-			self.lexer.next_tok()
+		elif self.token.type == "while":
+			self.next_token()
 			node = Node("while")
-			self.match("(")
+			self.match_token("(")
 			node.add(self.expr())
-			self.match(")")
+			self.match_token(")")
 			node.add(self.stmt())
 			return node
 
-		elif self.tok == "if":
-			self.lexer.next_tok()
+		elif self.token.type == "if":
+			self.next_token()
 			node = Node("if")
-			self.match("(")
+			self.match_token("(")
 			node.add(self.expr())
-			self.match(")")
+			self.match_token(")")
 			node.add(self.stmt())
-			if self.tok == "else":
-				self.lexer.next_tok()
+			if self.token.type == "else":
+				self.next_token()
 				node.add(self.stmt())
 			return node
 
-		elif self.tok == "{":
-			self.lexer.next_tok()
+		elif self.token.type == "{":
+			self.next_token()
 			node = Node("block")
-			while self.tok != "}": node.add(self.stmt())
-			self.lexer.next_tok()
+			while self.token.type != "}": node.add(self.stmt())
+			self.next_token()
 			return node
 
 		else:
 			node = self.expr()
-			self.match(";")
+			self.match_token(";")
 			return node
 
 	def expr(self, level=0):
 
 		# unary stuff
-		if self.tok == "number":
-			self.lexer.next_tok()
+		if self.token.type == "number":
 			node = Node("number")
-			node.number = self.number
-		elif self.tok == "+":
-			self.lexer.next_tok()
+			node.number = self.next_token().number
+		elif self.token.type == "+":
+			self.next_token()
 			node = self.expr(99)
-		elif self.tok == "-":
-			self.lexer.next_tok()
+		elif self.token.type == "-":
+			self.next_token()
 			node = Node("neg").add(self.expr(99))
-		elif self.tok == "(":
-			self.lexer.next_tok()
+		elif self.token.type == "(":
+			self.next_token()
 			node = self.expr()
-			self.match(")")
-		elif self.tok == "!":
-			self.lexer.next_tok()
+			self.match_token(")")
+		elif self.token.type == "!":
+			self.next_token()
 			node = Node("not").add(self.expr(99))
-		elif self.tok == "id":
-			self.lexer.next_tok()
-			if self.tok == "(":
+		elif self.token.type == "id":
+			t = self.next_token()
+			if self.token.type == "(":
+				self.next_token()
 				node = Node("call")
-				node.name = self.name
-				self.lexer.next_tok()
+				node.name = t.name
 				# TODO: args
-				self.match(")")
+				self.match_token(")")
 			else:
-				if self.name in self.enum:
+				if t.name in self.enum:
 					node = Node("number")
-					node.number = self.enum[self.name]
+					node.number = self.enum[t.name]
 				else:
 					node = Node("use")
-					node.name = self.name
+					node.name = t.name
 		else:
-			self.error("bad expression %r" % self.tok)
+			self.error("bad expression %r" % self.token.type)
 
 		# infix stuff
-		while self.tok in INFIX_LEVEL and INFIX_LEVEL[self.tok] >= level:
-			tok = self.tok
-			self.lexer.next_tok()
+		while self.token.type in INFIX_LEVEL and INFIX_LEVEL[self.token.type] >= level:
+			tok = self.token.type
+			self.next_token()
 			node = Node(tok).add(node).add(self.expr(INFIX_LEVEL[tok] + 1))
 		return node
 
