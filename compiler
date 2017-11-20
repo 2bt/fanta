@@ -395,6 +395,16 @@ def fold_constants(node):
 	if node.type in ("+", "-", "*", "/", "%"):
 		node.number = eval("%d %s %d" % (node.kids[0].number, node.type, node.kids[1].number))
 		node.type = "number"
+		node.kids = []
+	elif node.type == "neg":
+		node.number = -node.kids[0].number
+		node.type = "number"
+		node.kids = []
+	elif node.type == "not":
+		node.number = 0 if node.kids[0].number else 1
+		node.type = "number"
+		node.kids = []
+
 	# TODO: handle other operators
 
 
@@ -499,9 +509,11 @@ def compile(prog):
 			emit(node.number)
 
 		elif node.type == "neg":
+			cmpl(node.kids[0])
 			emit("NEG")
 
 		elif node.type == "not":
+			cmpl(node.kids[0])
 			emit("NOT")
 
 		elif node.type in OPCODES:
