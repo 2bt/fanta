@@ -37,7 +37,7 @@ EXPR_TYPES = INFIX_LEVEL.keys() + [
 
 
 class Node:
-
+	pos = (0, 0)
 	def __init__(self, type):
 		self.type = type
 		self.kids = []
@@ -75,8 +75,8 @@ KEYWORDS = [
 ]
 
 
-def error(pos, msg = ""):
-	print "error at %d:%d: " % (pos.row, pos.col) + msg
+def error(node, msg = ""):
+	print "error at %d:%d: " % node.pos + msg
 	exit(1)
 
 
@@ -104,7 +104,7 @@ class Lexer:
 		self.char = self.file.read(1)
 		if self.char == "\n":
 			self.row += 1
-			self.col = 1
+			self.col = 0
 		elif self.char:
 			self.col += 1
 		return c
@@ -112,8 +112,7 @@ class Lexer:
 	def scan(self):
 		while self.char:
 			token = Token()
-			token.row = self.row
-			token.col = self.col
+			token.pos = (self.row, self.col)
 			self.token = token
 
 			c = self.next_char()
@@ -164,7 +163,7 @@ class Parser:
 
 	def match_token(self, type):
 		if type != self.token.type:
-			error(self.token, "unexpected token %r (should be %r)" % (self.token.type, type))
+			error(self.token, "unexpected token %r (should probably be %r)" % (self.token.type, type))
 		return self.next_token()
 
 	def parse(self):
@@ -230,8 +229,9 @@ class Parser:
 	def stmt(self):
 
 		if self.token.type == "return":
-			self.next_token()
 			node = Node("return")
+			node.pos = self.token.pos
+			self.next_token()
 			if self.token.type != ";": node.add(self.expr())
 			self.match_token(";")
 			return node
@@ -322,6 +322,7 @@ class Parser:
 				self.next_token()
 				node = Node("call")
 				node.name = t.name
+				node.pos = t.pos
 				# TODO: args
 				self.match_token(")")
 			else:
@@ -330,6 +331,7 @@ class Parser:
 					node.number = self.enum[t.name]
 				else:
 					node = Node("use")
+					node.pos = t.pos
 					node.name = t.name
 		else:
 			error(self.token, "bad expression %r" % self.token.type)
@@ -352,7 +354,9 @@ def resolve_names(node):
 			kid = n
 			n = n.parent
 		for k in n.kids:
-			assert k != kid, "use of undefined variable %r" % node.name
+			# we have not found the variable declaration prior to its use
+			if k == kid:
+				error(node, "use of undefined variable %r" % node.name)
 			if k.type == "var" and k.name == node.name:
 				node.var = k
 				break
@@ -365,7 +369,7 @@ def resolve_names(node):
 				node.func = k
 				break
 		else:
-			assert False, "call of undefined function %r" % node.name
+			error(node, "call of undefined function %r" % node.name)
 
 
 def check_types(node):
@@ -375,7 +379,7 @@ def check_types(node):
 		t = node.kids[0].t if node.kids else "void"
 		n = node.parent
 		while n.type != "func": n = n.parent
-		assert n.t == t, "return type mismatch"
+		if n.t != t: error(node, "return type mismatch")
 		# TODO: check for missing return statement somehow
 
 	if not node.is_expr(): return
@@ -385,8 +389,8 @@ def check_types(node):
 	else:
 		node.t = node.kids[0].t
 		# all children must have the same expression type
-		assert all(k.t == node.t for k in node.kids), "type mismatch"
-		assert node.t != "void"
+		if any(k.t != node.t for k in node.kids): error(node, "type mismatch")
+		if node.t == "void": error(node, "type mismatch")
 
 
 def fold_constants(node):
@@ -497,7 +501,8 @@ def compile(prog):
 
 		elif node.type == "=":
 			# lvalue check for node.kids[0]
-			assert node.kids[0].is_lvalue()
+			if not node.kids[0].is_lvalue():
+				error(node, "assignment destination must be lvalue")
 			cmpl(node.kids[0])
 			bytecode.pop()
 			emit("PUSH")
