@@ -197,15 +197,18 @@ class Parser:
 
 			# read type and name
 			t = self.match_token("id")
-			n = self.match_token("id").name
+			n = self.match_token("id")
 
 			# function
 			if self.token.type == "(":
+				for k in prog.kids:
+					if k.type == "func" and k.name == n.name:
+						error(n, "redefinition of function %r" % n.name)
 				self.next_token()
 				node = Node("func")
 				if t.name not in ("void", "int"): error(t, "invalid type")
 				node.t = t.name
-				node.name = n
+				node.name = n.name
 				# TODO: arguments
 				self.match_token(")")
 				if self.token.type != "{": error(self.token, "no function block")
@@ -216,9 +219,12 @@ class Parser:
 
 			# variable
 			if t.name not in ("int"): error(t, "invalid type")
+			for k in prog.kids:
+				if k.type == "var" and k.name == n.name:
+					error(n, "redefinition of variable %r" % n.name)
 			node = Node("var")
 			node.t = t.name
-			node.name = n
+			node.name = n.name
 			self.match_token(";")
 			prog.add(node)
 			continue
