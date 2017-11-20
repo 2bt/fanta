@@ -76,7 +76,7 @@ KEYWORDS = [
 
 
 def error(pos, msg = ""):
-	print "error at %d:%d: " % (pos.row, self.col) + msg
+	print "error at %d:%d: " % (pos.row, pos.col) + msg
 	exit(1)
 
 
@@ -241,18 +241,27 @@ class Parser:
 			# fake for loop by using a while loop
 			node = Node("block")
 			self.match_token("(")
-			node.add(self.expr())
+			if self.token.type != ";":
+				node.add(self.expr())
 			self.match_token(";")
-			w = Node("while")
-			node.add(w)
-			w.add(self.expr())
+			loop = Node("while")
+			node.add(loop)
+			if self.token.type != ";":
+				cond = self.expr()
+			else:
+				cond = Node("number")
+				cond.number = 1
 			self.match_token(";")
-			i = self.expr()
+			loop.add(cond)
+			if self.token.type != ")":
+				inc = self.expr()
+			else:
+				inc = None
 			self.match_token(")")
-			b = Node("block")
-			w.add(b)
-			b.add(self.stmt())
-			b.add(i)
+			body = Node("block")
+			loop.add(body)
+			body.add(self.stmt())
+			if inc: body.add(inc)
 			return node
 
 		elif self.token.type == "while":
@@ -323,7 +332,7 @@ class Parser:
 					node = Node("use")
 					node.name = t.name
 		else:
-			self.error("bad expression %r" % self.token.type)
+			error(self.token, "bad expression %r" % self.token.type)
 
 		# infix stuff
 		while self.token.type in INFIX_LEVEL and INFIX_LEVEL[self.token.type] >= level:
