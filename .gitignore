@@ -1,3 +1,2 @@
-vm
-bytecode
-tool/build
+compiler/build
+vm/build
