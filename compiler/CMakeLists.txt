@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.7)
 
 add_compile_options(-std=c++17 -Wall -O2)
 
-project(tool)
+project(compiler)
 
 file(GLOB SRC "src/*.hpp" "src/*.cpp")
 

@@ -11,7 +11,12 @@ int main(int argc, char** argv) {
 
     )");
 
-    Token t = lex.next_token();
+    for (;;) {
+        Token t = lex.next_token();
+        printf("token %d, '%c', %s, %d\n", t.type, t.type, t.name.c_str(), t.number);
+
+        if (t.type == T_EOF) break;
+    }
 
     return 0;
 }

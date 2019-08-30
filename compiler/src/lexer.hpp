@@ -1,6 +1,21 @@
+#include <string>
 
 enum TokenType {
     T_EOF,
+
+    // keywords
+    T_RETURN,
+    T_IF,
+    T_ELSE,
+    T_WHILE,
+    T_FOR,
+    T_BREAK,
+    T_CONTINUE,
+    T_ENUM,
+
+    T_ID,
+    T_NUMBER,
+
 };
 
 struct Token {
@@ -8,21 +23,25 @@ struct Token {
     int         row;
     int         col;
     char const* line;
+    std::string name;
+    int         number;
 };
 
 
 class Lexer {
 public:
-    Lexer(char const* code) : m_code(code), m_line(code) {}
+    Lexer(char const* code) : m_code(code), m_line(code) {
+        next_char();
+    }
 
     Token next_token() {
-        scan();
+        m_tok.type = scan();
         return m_tok;
     }
 
 private:
     char next_char();
-    void scan();
+    TokenType scan();
 
     char const* m_code;
     char        m_char;
