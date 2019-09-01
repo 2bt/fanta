@@ -3,11 +3,17 @@
 
 #define GENERATE_ENUM(e, ...) e __VA_ARGS__,
 #define FOR_EACH_NodeType(F) \
+    /* stmt */\
+    F(N_BLOCK) \
+    F(N_RETURN) \
+    F(N_IF) \
+    F(N_WHILE) \
+    /* expr */\
+    F(N_VAR) \
+    F(N_CALL) \
     F(N_NUMBER) \
     F(N_NEG) \
     F(N_NOT) \
-    F(N_CALL) \
-    F(N_VAR) \
     /* binary operator */\
     F(N_ASSIGN, = T_ASSIGN) \
     F(N_LOGIC_OR) \
@@ -61,6 +67,7 @@ public:
     }
 
     Node* expr(TokenType level = T_ASSIGN);
+    Node* stmt();
 
 private:
     Token next_token();

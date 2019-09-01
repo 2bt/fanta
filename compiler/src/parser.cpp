@@ -1,6 +1,5 @@
 #include "parser.hpp"
 #include <map>
-#include <cassert>
 
 #define GENERATE_CASE(e, ...) case e: return #e + 2;
 static char const* NodeTypeStr(NodeType t) {
@@ -36,9 +35,10 @@ Token Parser::match_token(TokenType type) {
     return next_token();
 }
 
+
 Node* Parser::expr(TokenType level) {
 
-    Node* n = nullptr;
+    Node* n;
     Token t;
 
     // unary
@@ -122,7 +122,11 @@ Node* Parser::expr(TokenType level) {
         if (m_tok.type == T_DOT) {
             // field access
             next_token();
-            assert(m_tok.type == T_ID);
+            if (m_tok.type != T_ID) {
+                printf("%d:%d: parser error: unexpected token %d\n",
+                    m_tok.row, m_tok.col, m_tok.type);
+                exit(1);
+            }
             Node* m = n;
             n = new Node(NodeType(T_DOT));
             n->name = m_tok.name;
@@ -132,10 +136,62 @@ Node* Parser::expr(TokenType level) {
             continue;
         }
 
-
         printf("%d:%d: parser error: unexpected token %d\n",
             m_tok.row, m_tok.col, m_tok.type);
         exit(1);
+    }
+
+    return n;
+}
+
+
+Node* Parser::stmt() {
+
+    Node* n = nullptr;
+
+    switch (m_tok.type) {
+    case T_BRACE:
+        next_token();
+        n = new Node(N_BLOCK);
+        while (m_tok.type != T_CLOSE_BRACE) {
+            n->kids.push_back(stmt());
+        }
+        next_token();
+        break;
+
+    case T_WHILE:
+        next_token();
+        n = new Node(N_WHILE);
+        match_token(T_PARENT);
+        n->kids.push_back(expr());
+        match_token(T_CLOSE_PARENT);
+        n->kids.push_back(stmt());
+        break;
+
+    case T_IF:
+        next_token();
+        n = new Node(N_IF);
+        match_token(T_PARENT);
+        n->kids.push_back(expr());
+        match_token(T_CLOSE_PARENT);
+        n->kids.push_back(stmt());
+        if (m_tok.type == T_ELSE) {
+            next_token();
+            n->kids.push_back(stmt());
+        }
+        break;
+
+    case T_RETURN:
+        next_token();
+        n = new Node(N_RETURN);
+        if (m_tok.type != T_SEMICOLON) n->kids.push_back(expr());
+        match_token(T_SEMICOLON);
+        break;
+
+    default:
+        n = expr();
+        match_token(T_SEMICOLON);
+        break;
     }
 
     return n;
