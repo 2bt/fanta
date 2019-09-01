@@ -1,17 +1,19 @@
 #include "parser.hpp"
+#include <map>
+#include <cassert>
 
-constexpr char const* NODE_TYPE_STRING_TABLE[] = {
-    "NUMBER",
-    "NEG",
-    "NOT",
-    "CALL",
-    "USE",
-};
+#define GENERATE_CASE(e, ...) case e: return #e + 2;
+static char const* NodeTypeStr(NodeType t) {
+    switch (t) {
+    FOR_EACH_NodeType(GENERATE_CASE)
+    default: return nullptr;
+    }
+}
 
 void Node::print(int indent) const {
-    printf("%*s%s", indent, "", NODE_TYPE_STRING_TABLE[type]);
+    printf("%*s%s", indent, "", NodeTypeStr(type));
     if (type == N_NUMBER) printf(" %d", number);
-    if (type == N_CALL || type == N_USE) printf(" %s", name.c_str());
+    if (type == N_CALL || type == N_VAR || type == N_DOT) printf(" %s", name.c_str());
     printf("\n");
     for (Node const* k : kids) k->print(indent + 2);
 }
@@ -34,7 +36,7 @@ Token Parser::match_token(TokenType type) {
     return next_token();
 }
 
-Node* Parser::expr(int level) {
+Node* Parser::expr(TokenType level) {
 
     Node* n = nullptr;
     Token t;
@@ -48,15 +50,16 @@ Node* Parser::expr(int level) {
     case T_SUB:
         next_token();
         n = new Node(N_NEG);
-        n->kids.push_back(expr(99));
+        n->kids.push_back(expr(T_DOT));
         break;
     case T_NOT:
         next_token();
         n = new Node(N_NOT);
-        n->kids.push_back(expr(99));
+        n->kids.push_back(expr(T_DOT));
         break;
     case T_PARENT:
         next_token();
+        // TODO: cast
         n = expr();
         match_token(T_CLOSE_PARENT);
         break;
@@ -70,7 +73,7 @@ Node* Parser::expr(int level) {
             match_token(T_CLOSE_PARENT);
         }
         else {
-            n = new Node(N_USE);
+            n = new Node(N_VAR);
             n->name = t.name;
         }
         break;
@@ -82,7 +85,58 @@ Node* Parser::expr(int level) {
 
 
     // infix
+    while (m_tok.type >= level) {
+        static const std::map<TokenType, TokenType> LEVEL_TABLE = {
+            { T_ASSIGN, T_ASSIGN },
+            { T_LOGIC_OR, T_LOGIC_AND },
+            { T_LOGIC_AND, T_OR },
+            { T_OR, T_AND },
+            { T_AND, T_EQ },
+            { T_EQ, T_LT },
+            { T_NE, T_LT },
+            { T_LT, T_SHL },
+            { T_GT, T_SHL },
+            { T_LE, T_SHL },
+            { T_GE, T_SHL },
+            { T_SHL, T_ADD },
+            { T_SHR, T_ADD },
+            { T_ADD, T_MUL },
+            { T_SUB, T_MUL },
+            { T_MUL, T_DOT },
+            { T_DIV, T_DOT },
+            { T_MOD, T_DOT },
+            { T_BRACKET, T_ASSIGN },
+        };
+        auto it = LEVEL_TABLE.find(m_tok.type);
+        if (it != LEVEL_TABLE.end()) {
+            next_token();
+            Node* m = n;
+            n = new Node(NodeType(it->first));
+            n->kids.push_back(m);
+            n->kids.push_back(expr(it->second));
+            if (it->first == T_BRACKET) {
+                match_token(T_CLOSE_BRACKET);
+            }
+            continue;
+        }
+        if (m_tok.type == T_DOT) {
+            // field access
+            next_token();
+            assert(m_tok.type == T_ID);
+            Node* m = n;
+            n = new Node(NodeType(T_DOT));
+            n->name = m_tok.name;
+            n->kids.push_back(m);
+            next_token();
 
+            continue;
+        }
+
+
+        printf("%d:%d: parser error: unexpected token %d\n",
+            m_tok.row, m_tok.col, m_tok.type);
+        exit(1);
+    }
 
     return n;
 }

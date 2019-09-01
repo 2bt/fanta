@@ -1,13 +1,38 @@
 #include "lexer.hpp"
 #include <vector>
 
+#define GENERATE_ENUM(e, ...) e __VA_ARGS__,
+#define FOR_EACH_NodeType(F) \
+    F(N_NUMBER) \
+    F(N_NEG) \
+    F(N_NOT) \
+    F(N_CALL) \
+    F(N_VAR) \
+    /* binary operator */\
+    F(N_ASSIGN, = T_ASSIGN) \
+    F(N_LOGIC_OR) \
+    F(N_LOGIC_AND) \
+    F(N_OR) \
+    F(N_AND) \
+    F(N_EQ) \
+    F(N_NE) \
+    F(N_LT) \
+    F(N_GT) \
+    F(N_LE) \
+    F(N_GE) \
+    F(N_SHL) \
+    F(N_SHR) \
+    F(N_ADD) \
+    F(N_SUB) \
+    F(N_DIV) \
+    F(N_MUL) \
+    F(N_MOD) \
+    F(N_DOT) \
+    F(N_BRACKET) \
+
 
 enum NodeType {
-    N_NUMBER,
-    N_NEG,
-    N_NOT,
-    N_CALL,
-    N_USE,
+    FOR_EACH_NodeType(GENERATE_ENUM)
 };
 
 
@@ -35,7 +60,7 @@ public:
         next_token();
     }
 
-    Node* expr(int level = 0);
+    Node* expr(TokenType level = T_ASSIGN);
 
 private:
     Token next_token();
