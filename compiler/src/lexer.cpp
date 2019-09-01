@@ -18,6 +18,12 @@ char Lexer::next_char() {
 }
 
 
+Token Lexer::next_token() {
+    m_tok.type = scan();
+    return m_tok;
+}
+
+
 const std::map<std::string, TokenType> KEYWORDS = {
     { "return",   T_RETURN },
     { "if",       T_IF },
@@ -57,17 +63,52 @@ TokenType Lexer::scan() {
             return T_NUMBER;
         }
 
-        if (strchr("[](){}+-*/%;~,", c)) return TokenType(c);
-        if (c == '=' || c == '!') {
-            if (m_char != '=') return TokenType(c);
-            return TokenType(c + 0x100);
+        if (c == '(') return T_PARENT;
+        if (c == ')') return T_CLOSE_PARENT;
+        if (c == '[') return T_BRACKET;
+        if (c == ']') return T_CLOSE_BRACKET;
+        if (c == '{') return T_BRACE;
+        if (c == '}') return T_CLOSE_BRACE;
+        if (c == ',') return T_COMMA;
+        if (c == ';') return T_SEMICOLON;
+        if (c == ':') return T_COLON;
+        if (c == '!') return T_NOT;
+        if (c == '+') return T_ADD;
+        if (c == '-') return T_SUB;
+        if (c == '*') return T_MUL;
+        if (c == '/') return T_DIV;
+        if (c == '%') return T_MOD;
+        if (c == '.') return T_DOT;
+        if (c == '=') {
+            if (m_char == '=') { next_char(); return T_EQ; }
+            return T_ASSIGN;
         }
-
-        // TODO: shift
+        if (c == '|') {
+            if (m_char == '|') { next_char(); return T_LOGIC_OR; }
+            return T_OR;
+        }
+        if (c == '&') {
+            if (m_char == '&') { next_char(); return T_LOGIC_AND; }
+            return T_AND;
+        }
+        if (c == '<') {
+            if (m_char == '<') { next_char(); return T_SHL; }
+            if (m_char == '=') { next_char(); return T_LE; }
+            return T_LT;
+        }
+        if (c == '>') {
+            if (m_char == '>') { next_char(); return T_SHR; }
+            if (m_char == '=') { next_char(); return T_GE; }
+            return T_GT;
+        }
+        if (c == '!') {
+            if (m_char == '=') { next_char(); return T_NE; }
+            return T_NOT;
+        }
 
         if (!isspace(c)) {
             printf("%d:%d: lexer error: unexpected character '%c'\n", m_tok.row, m_tok.col, c);
-            exit(0);
+            exit(1);
         }
     }
 

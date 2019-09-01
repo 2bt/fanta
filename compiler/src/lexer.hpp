@@ -16,6 +16,40 @@ enum TokenType {
     T_ID,
     T_NUMBER,
 
+    T_PARENT,
+    T_CLOSE_PARENT,
+    T_CLOSE_BRACKET,
+    T_BRACE,
+    T_CLOSE_BRACE,
+
+    T_COMMA,
+    T_SEMICOLON,
+    T_COLON,
+    T_NOT,
+
+    // binary operators
+    T_ASSIGN,
+    T_LOGIC_OR,
+    T_LOGIC_AND,
+    T_OR,
+    T_AND,
+    T_EQ,
+    T_NE,
+    T_LT,
+    T_GT,
+    T_LE,
+    T_GE,
+    T_SHL,
+    T_SHR,
+    T_ADD,
+    T_SUB,
+    T_DIV,
+    T_MUL,
+    T_MOD,
+    T_DOT,
+    T_BRACKET,
+
+
 };
 
 struct Token {
@@ -34,10 +68,7 @@ public:
         next_char();
     }
 
-    Token next_token() {
-        m_tok.type = scan();
-        return m_tok;
-    }
+    Token next_token();
 
 private:
     char next_char();

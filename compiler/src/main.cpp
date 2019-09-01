@@ -1,22 +1,29 @@
-#include "lexer.hpp"
+#include "parser.hpp"
 #include <cstdio>
+
+
 
 
 int main(int argc, char** argv) {
 
-    Lexer lex(R"(
+//    Lexer lexer(R"(
+//        int a = 0;
+//        a = 5 + a * 3;
+//    )");
+//    for (;;) {
+//        Token t = lexer.next_token();
+//        printf("token %d, '%c', %s, %d\n", t.type, t.type, t.name.c_str(), t.number);
+//        if (t.type == T_EOF) break;
+//    }
 
-        int a = 0;
-        a = 5 + a * 3;
 
+    Parser parser(R"(
+        -func
     )");
 
-    for (;;) {
-        Token t = lex.next_token();
-        printf("token %d, '%c', %s, %d\n", t.type, t.type, t.name.c_str(), t.number);
-
-        if (t.type == T_EOF) break;
-    }
+    Node* s = parser.expr();
+    s->print();
+    delete s;
 
     return 0;
 }
