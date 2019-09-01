@@ -12,6 +12,8 @@ enum TokenType {
     T_BREAK,
     T_CONTINUE,
     T_ENUM,
+    T_STRUCT,
+    T_INT,
 
     T_ID,
     T_NUMBER,

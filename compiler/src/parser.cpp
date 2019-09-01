@@ -57,6 +57,16 @@ Node* Parser::expr(TokenType level) {
         n = new Node(N_NOT);
         n->kids.push_back(expr(T_DOT));
         break;
+    case T_AND:
+        next_token();
+        n = new Node(N_REF);
+        n->kids.push_back(expr(T_DOT));
+        break;
+    case T_MUL:
+        next_token();
+        n = new Node(N_DEREF);
+        n->kids.push_back(expr(T_DOT));
+        break;
     case T_PARENT:
         next_token();
         // TODO: cast
@@ -147,7 +157,7 @@ Node* Parser::expr(TokenType level) {
 
 Node* Parser::stmt() {
 
-    Node* n = nullptr;
+    Node* n;
 
     switch (m_tok.type) {
     case T_BRACE:
@@ -195,4 +205,14 @@ Node* Parser::stmt() {
     }
 
     return n;
+}
+
+
+Node* Parser::parse() {
+
+    Node* root = new Node(N_ROOT);
+
+
+
+    return root;
 }

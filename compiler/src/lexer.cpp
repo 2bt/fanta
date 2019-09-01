@@ -33,6 +33,8 @@ const std::map<std::string, TokenType> KEYWORDS = {
     { "break",    T_BREAK },
     { "continue", T_CONTINUE },
     { "enum",     T_ENUM },
+    { "struct",   T_STRUCT },
+    { "int",      T_INT },
 };
 
 
