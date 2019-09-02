@@ -34,6 +34,7 @@ const std::map<std::string, TokenType> KEYWORDS = {
     { "continue", T_CONTINUE },
     { "enum",     T_ENUM },
     { "struct",   T_STRUCT },
+    { "void",     T_VOID },
     { "int",      T_INT },
 };
 
@@ -76,11 +77,14 @@ TokenType Lexer::scan() {
         if (c == ':') return T_COLON;
         if (c == '!') return T_NOT;
         if (c == '+') return T_ADD;
-        if (c == '-') return T_SUB;
         if (c == '*') return T_MUL;
         if (c == '/') return T_DIV;
         if (c == '%') return T_MOD;
         if (c == '.') return T_DOT;
+        if (c == '-') {
+            if (m_char == '>') { next_char(); return T_ARROW; }
+            return T_SUB;
+        }
         if (c == '=') {
             if (m_char == '=') { next_char(); return T_EQ; }
             return T_ASSIGN;

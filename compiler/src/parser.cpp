@@ -1,6 +1,7 @@
 #include "parser.hpp"
 #include <map>
 
+
 #define GENERATE_CASE(e, ...) case e: return #e + 2;
 static char const* NodeTypeStr(NodeType t) {
     switch (t) {
@@ -12,7 +13,8 @@ static char const* NodeTypeStr(NodeType t) {
 void Node::print(int indent) const {
     printf("%*s%s", indent, "", NodeTypeStr(type));
     if (type == N_NUMBER) printf(" %d", number);
-    if (type == N_CALL || type == N_VAR || type == N_DOT) printf(" %s", name.c_str());
+    if (type == N_CALL || type == N_VAR || type == N_VAR_DECL ||
+        type == N_DOT || type == N_ARROW) printf(" %s", name.c_str());
     printf("\n");
     for (Node const* k : kids) k->print(indent + 2);
 }
@@ -36,7 +38,7 @@ Token Parser::match_token(TokenType type) {
 }
 
 
-Node* Parser::expr(TokenType level) {
+Node* Parser::parse_expr(TokenType level) {
 
     Node* n;
     Token t;
@@ -50,27 +52,27 @@ Node* Parser::expr(TokenType level) {
     case T_SUB:
         next_token();
         n = new Node(N_NEG);
-        n->kids.push_back(expr(T_DOT));
+        n->add(parse_expr(T_DOT));
         break;
     case T_NOT:
         next_token();
         n = new Node(N_NOT);
-        n->kids.push_back(expr(T_DOT));
+        n->add(parse_expr(T_DOT));
         break;
     case T_AND:
         next_token();
         n = new Node(N_REF);
-        n->kids.push_back(expr(T_DOT));
+        n->add(parse_expr(T_DOT));
         break;
     case T_MUL:
         next_token();
         n = new Node(N_DEREF);
-        n->kids.push_back(expr(T_DOT));
+        n->add(parse_expr(T_DOT));
         break;
     case T_PARENT:
         next_token();
         // TODO: cast
-        n = expr();
+        n = parse_expr();
         match_token(T_CLOSE_PARENT);
         break;
     case T_ID:
@@ -79,8 +81,15 @@ Node* Parser::expr(TokenType level) {
             next_token();
             n = new Node(N_CALL);
             n->name = t.name;
-            // TODO: args
-            match_token(T_CLOSE_PARENT);
+            // arguments
+            if (m_tok.type != T_CLOSE_PARENT) {
+                for (;;) {
+                    n->add(parse_expr());
+                    if (m_tok.type == T_CLOSE_PARENT) break;
+                    match_token(T_COMMA);
+                }
+            }
+            next_token();
         }
         else {
             n = new Node(N_VAR);
@@ -122,26 +131,23 @@ Node* Parser::expr(TokenType level) {
             next_token();
             Node* m = n;
             n = new Node(NodeType(it->first));
-            n->kids.push_back(m);
-            n->kids.push_back(expr(it->second));
+            n->add(m);
+            n->add(parse_expr(it->second));
             if (it->first == T_BRACKET) {
                 match_token(T_CLOSE_BRACKET);
             }
             continue;
         }
-        if (m_tok.type == T_DOT) {
+        if (m_tok.type == T_DOT ||
+            m_tok.type == T_ARROW) {
+            TokenType t = m_tok.type;
             // field access
             next_token();
-            if (m_tok.type != T_ID) {
-                printf("%d:%d: parser error: unexpected token %d\n",
-                    m_tok.row, m_tok.col, m_tok.type);
-                exit(1);
-            }
+            Token tok = match_token(T_ID);
             Node* m = n;
-            n = new Node(NodeType(T_DOT));
-            n->name = m_tok.name;
-            n->kids.push_back(m);
-            next_token();
+            n = new Node(NodeType(t));
+            n->name = tok.name;
+            n->add(m);
 
             continue;
         }
@@ -155,64 +161,130 @@ Node* Parser::expr(TokenType level) {
 }
 
 
-Node* Parser::stmt() {
+bool Parser::try_parse_data_type(DataType& dt) {
+    if (m_tok.type == T_INT) dt.type = DataType::INT;
+    else if (m_tok.type == T_VOID) dt.type = DataType::VOID;
+    else if (m_tok.type == T_ID) {
+        auto it = m_root->structs.find(m_tok.name);
+        if (it == m_root->structs.end()) return false;
+        dt.type = DataType::STRUCT;
+        dt.strct = &it->second;
+    }
+    else return false;
+    next_token();
+    while (m_tok.type == T_MUL) {
+        next_token();
+        ++dt.pointer;
+    }
+    return true;
+};
+
+
+bool Parser::try_parse_array(DataType& dt) {
+    if (m_tok.type != T_BRACKET) return false;
+    next_token();
+    // XXX: enum
+    dt.is_array = true;
+    dt.length   = match_token(T_NUMBER).number;
+    return true;
+}
+
+
+Node* Parser::parse_stmt() {
 
     Node* n;
+    DataType dt;
+
+    if (try_parse_data_type(dt)) {
+        n = new Node(N_VAR_DECL);
+        n->data_type = dt;
+        n->name = match_token(T_ID).name;
+        try_parse_array(n->data_type);
+        match_token(T_SEMICOLON);
+        return n;
+    }
 
     switch (m_tok.type) {
     case T_BRACE:
         next_token();
         n = new Node(N_BLOCK);
         while (m_tok.type != T_CLOSE_BRACE) {
-            n->kids.push_back(stmt());
+            n->add(parse_stmt());
         }
         next_token();
-        break;
+        return n;
 
     case T_WHILE:
         next_token();
         n = new Node(N_WHILE);
         match_token(T_PARENT);
-        n->kids.push_back(expr());
+        n->add(parse_expr());
         match_token(T_CLOSE_PARENT);
-        n->kids.push_back(stmt());
-        break;
+        n->add(parse_stmt());
+        return n;
 
     case T_IF:
         next_token();
         n = new Node(N_IF);
         match_token(T_PARENT);
-        n->kids.push_back(expr());
+        n->add(parse_expr());
         match_token(T_CLOSE_PARENT);
-        n->kids.push_back(stmt());
+        n->add(parse_stmt());
         if (m_tok.type == T_ELSE) {
             next_token();
-            n->kids.push_back(stmt());
+            n->add(parse_stmt());
         }
-        break;
+        return n;
 
     case T_RETURN:
         next_token();
         n = new Node(N_RETURN);
-        if (m_tok.type != T_SEMICOLON) n->kids.push_back(expr());
+        if (m_tok.type != T_SEMICOLON) n->add(parse_expr());
         match_token(T_SEMICOLON);
-        break;
+        return n;
 
     default:
-        n = expr();
+        n = parse_expr();
         match_token(T_SEMICOLON);
-        break;
+        return n;
     }
-
-    return n;
 }
 
 
-Node* Parser::parse() {
+RootNode* Parser::parse_program() {
+    m_root = new RootNode();
 
-    Node* root = new Node(N_ROOT);
+    while (m_tok.type) {
+
+        DataType dt;
+        if (try_parse_data_type(dt)) {
+            Node* n = new Node(N_VAR_DECL);
+            n->data_type = dt;
+            n->name = match_token(T_ID).name;
+            try_parse_array(n->data_type);
+            match_token(T_SEMICOLON);
+
+            m_root->add(n);
+
+            continue;
+        }
 
 
+        if (m_tok.type == T_ENUM) {
 
-    return root;
+            continue;
+        }
+        if (m_tok.type == T_STRUCT) {
+
+            continue;
+        }
+
+
+        printf("%d:%d: parser error: unexpected token %d\n",
+            m_tok.row, m_tok.col, m_tok.type);
+        exit(1);
+    }
+
+
+    return m_root;
 }

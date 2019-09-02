@@ -13,6 +13,7 @@ enum TokenType {
     T_CONTINUE,
     T_ENUM,
     T_STRUCT,
+    T_VOID,
     T_INT,
 
     T_ID,
@@ -49,6 +50,7 @@ enum TokenType {
     T_MUL,
     T_MOD,
     T_DOT,
+    T_ARROW,
     T_BRACKET,
 
 

@@ -7,18 +7,14 @@
 int main(int argc, char** argv) {
 
     Parser parser(
-R"({
-    # test
-    a[0].hallo = 3;
-    q = a[2].hallo.foo[3 + 4] * 3 - func().a % 10;
+R"(
 
-    if (a == 1) {
-        foo();
-    }
-    else b = 1;
-})");
 
-    Node* s = parser.stmt();
+int* a;
+
+    )");
+
+    RootNode* s = parser.parse_program();
     s->print();
     delete s;
 
