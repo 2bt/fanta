@@ -41,6 +41,12 @@ std::string DataType::to_string() const {
     if (is_array) s += '[' + std::to_string(length) + ']';
     return s;
 }
+int DataType::size() const {
+    int s = 1;
+    if (pointer == 0 && type == STRUCT) s = strct->size();
+    if (is_array) s *= length;
+    return s;
+}
 
 
 Token Parser::next_token() {

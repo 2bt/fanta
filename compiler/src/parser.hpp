@@ -55,6 +55,7 @@ struct Struct;
 
 struct DataType {
     std::string to_string() const;
+    int size() const;
 
     enum Type {
         VOID,
@@ -71,6 +72,12 @@ struct DataType {
 
 
 struct Struct {
+    int size() const {
+        int s = 0;
+        for (auto const& f : fields) s += f.data_type.size();
+        return s;
+    }
+
     struct Field {
         std::string name;
         DataType    data_type;
