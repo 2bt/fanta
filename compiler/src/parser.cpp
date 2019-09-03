@@ -25,6 +25,7 @@ void RootNode::print() const {
     for (auto const& p : enums) {
         printf("  %s = %d\n", p.first.c_str(), p.second);
     }
+    printf("STRUCTS\n");
     for (auto const& p : structs) {
         printf("  %s\n", p.first.c_str());
         for (Struct::Field const& f : p.second.fields) {
