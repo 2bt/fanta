@@ -5,7 +5,6 @@
 
 #define GENERATE_ENUM(e, ...) e __VA_ARGS__,
 #define FOR_EACH_NodeType(F) \
-    F(N_ROOT) \
     F(N_STRUCT) \
     F(N_FUNC) \
     F(N_VAR_DECL) \
@@ -55,57 +54,64 @@ struct Struct;
 
 
 struct DataType {
+    std::string to_string() const;
+
     enum Type {
         VOID,
         INT,
         STRUCT,
     };
-    Type    type;
-    int     pointer;
-    bool    is_array;
-    int     length;
-    Struct* strct;
+    Type    type     = VOID;
+    int     pointer  = 0;
+    bool    is_array = false;
+    int     length   = 0;
+    Struct* strct    = nullptr;
+
 };
 
 
 struct Struct {
-    std::string name;
     struct Field {
         std::string name;
         DataType    data_type;
     };
+    std::string        name;
+    std::vector<Field> fields;
 };
 
 
 struct Node {
     Node(NodeType type) : type(type) {}
-    ~Node() {
-        for (Node const* k : kids) delete k;
-    }
-
+    Node(NodeType type, Node* kid) : Node(type) { add(kid); }
+    Node(NodeType type, Node* kid, Node* kid2) : Node(type, kid) { add(kid2); }
+    ~Node() { for (Node const* k : kids) delete k; }
 
     void print(int indent = 0) const;
     void add(Node* kid) {
         kids.push_back(kid);
-        kid->parent = this;
     }
 
     NodeType           type;
-    Node*              parent = nullptr;
     std::vector<Node*> kids;
 
     std::string        name;
     int                number;
-    DataType           data_type = {};
-
+    DataType           data_type;
 };
 
 
-struct RootNode : Node {
-    RootNode() : Node(N_ROOT) {}
+struct RootNode {
+    ~RootNode() {
+        //for (Node const* k : kids) delete k;
+    }
+    void print() const;
 
     std::map<std::string, int>    enums;
     std::map<std::string, Struct> structs;
+
+    // TODO:
+    // globals
+    // functions
 };
 
 

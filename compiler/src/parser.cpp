@@ -1,5 +1,6 @@
 #include "parser.hpp"
 #include <map>
+#include <cassert>
 
 
 #define GENERATE_CASE(e, ...) case e: return #e + 2;
@@ -17,6 +18,28 @@ void Node::print(int indent) const {
         type == N_DOT || type == N_ARROW) printf(" %s", name.c_str());
     printf("\n");
     for (Node const* k : kids) k->print(indent + 2);
+}
+
+void RootNode::print() const {
+    printf("ENUMS\n");
+    for (auto const& p : enums) {
+        printf("  %s = %d\n", p.first.c_str(), p.second);
+    }
+    for (auto const& p : structs) {
+        printf("  %s\n", p.first.c_str());
+        for (Struct::Field const& f : p.second.fields) {
+            printf("    %s %s\n", f.name.c_str(), f.data_type.to_string().c_str());
+        }
+    }
+}
+
+std::string DataType::to_string() const {
+    std::string s = type == VOID ? "void"
+                  : type == INT ? "int"
+                  : strct->name;
+    s += std::string(pointer, '*');
+    if (is_array) s += '[' + std::to_string(length) + ']';
+    return s;
 }
 
 
@@ -51,23 +74,23 @@ Node* Parser::parse_expr(TokenType level) {
         break;
     case T_SUB:
         next_token();
-        n = new Node(N_NEG);
-        n->add(parse_expr(T_DOT));
+        n = parse_expr(T_DOT);
+        if (n->type == N_NUMBER) n->number = -n->number;
+        else n = new Node(N_NEG, n);
         break;
     case T_NOT:
         next_token();
-        n = new Node(N_NOT);
-        n->add(parse_expr(T_DOT));
+        n = parse_expr(T_DOT);
+        if (n->type == N_NUMBER) n->number = !n->number;
+        else n = new Node(N_NEG, n);
         break;
     case T_AND:
         next_token();
-        n = new Node(N_REF);
-        n->add(parse_expr(T_DOT));
+        n = new Node(N_REF, parse_expr(T_DOT));
         break;
     case T_MUL:
         next_token();
-        n = new Node(N_DEREF);
-        n->add(parse_expr(T_DOT));
+        n = new Node(N_DEREF, parse_expr(T_DOT));
         break;
     case T_PARENT:
         next_token();
@@ -92,8 +115,15 @@ Node* Parser::parse_expr(TokenType level) {
             next_token();
         }
         else {
-            n = new Node(N_VAR);
-            n->name = t.name;
+            auto it = m_root->enums.find(t.name);
+            if (it != m_root->enums.end()) {
+                n = new Node(N_NUMBER);
+                n->number = it->second;
+            }
+            else {
+                n = new Node(N_VAR);
+                n->name = t.name;
+            }
         }
         break;
     default:
@@ -129,16 +159,35 @@ Node* Parser::parse_expr(TokenType level) {
         auto it = LEVEL_TABLE.find(m_tok.type);
         if (it != LEVEL_TABLE.end()) {
             next_token();
-            Node* m = n;
-            n = new Node(NodeType(it->first));
-            n->add(m);
-            n->add(parse_expr(it->second));
+            Node* m = parse_expr(it->second);
+            // fold constants
+            bool fold = true;
+            if (n->type == N_NUMBER && m->type == N_NUMBER) {
+                if      (it->first == T_ADD) n->number += m->number;
+                else if (it->first == T_SUB) n->number -= m->number;
+                else if (it->first == T_MUL) n->number *= m->number;
+                else if (it->first == T_DIV) n->number /= m->number;
+                else if (it->first == T_SHL) n->number <<= m->number;
+                else if (it->first == T_SHR) n->number >>= m->number;
+                else if (it->first == T_AND) n->number &= m->number;
+                else if (it->first == T_OR)  n->number |= m->number;
+                else if (it->first == T_EQ)  n->number = n->number == m->number;
+                else if (it->first == T_NE)  n->number = n->number != m->number;
+                else if (it->first == T_LT)  n->number = n->number <  m->number;
+                else if (it->first == T_LE)  n->number = n->number <= m->number;
+                else if (it->first == T_GT)  n->number = n->number >  m->number;
+                else if (it->first == T_GE)  n->number = n->number >= m->number;
+                else if (it->first == T_AND) n->number = n->number && m->number;
+                else if (it->first == T_OR)  n->number = n->number || m->number;
+                else fold = false;
+            }
+            if (fold) delete m;
+            else n = new Node(NodeType(it->first), n, m);
             if (it->first == T_BRACKET) {
                 match_token(T_CLOSE_BRACKET);
             }
-            continue;
         }
-        if (m_tok.type == T_DOT ||
+        else if (m_tok.type == T_DOT ||
             m_tok.type == T_ARROW) {
             TokenType t = m_tok.type;
             // field access
@@ -148,13 +197,12 @@ Node* Parser::parse_expr(TokenType level) {
             n = new Node(NodeType(t));
             n->name = tok.name;
             n->add(m);
-
-            continue;
         }
-
-        printf("%d:%d: parser error: unexpected token %d\n",
-            m_tok.row, m_tok.col, m_tok.type);
-        exit(1);
+        else {
+            printf("%d:%d: parser error: unexpected token %d\n",
+                m_tok.row, m_tok.col, m_tok.type);
+            exit(1);
+        }
     }
 
     return n;
@@ -172,6 +220,7 @@ bool Parser::try_parse_data_type(DataType& dt) {
     }
     else return false;
     next_token();
+    dt.pointer = 0;
     while (m_tok.type == T_MUL) {
         next_token();
         ++dt.pointer;
@@ -181,11 +230,18 @@ bool Parser::try_parse_data_type(DataType& dt) {
 
 
 bool Parser::try_parse_array(DataType& dt) {
-    if (m_tok.type != T_BRACKET) return false;
+    if (m_tok.type != T_BRACKET) {
+        dt.is_array = false;
+        dt.length   = 0;
+        return false;
+    }
     next_token();
-    // XXX: enum
     dt.is_array = true;
-    dt.length   = match_token(T_NUMBER).number;
+    Node* n = parse_expr(T_LOGIC_OR);
+    match_token(T_CLOSE_BRACKET);
+    assert(n->type == N_NUMBER);
+    dt.length = n->number;
+    delete n;
     return true;
 }
 
@@ -196,11 +252,12 @@ Node* Parser::parse_stmt() {
     DataType dt;
 
     if (try_parse_data_type(dt)) {
-        n = new Node(N_VAR_DECL);
-        n->data_type = dt;
-        n->name = match_token(T_ID).name;
-        try_parse_array(n->data_type);
+        std::string name = match_token(T_ID).name;
+        try_parse_array(dt);
         match_token(T_SEMICOLON);
+        n = new Node(N_VAR_DECL);
+        n->name = name;
+        n->data_type = dt;
         return n;
     }
 
@@ -216,18 +273,16 @@ Node* Parser::parse_stmt() {
 
     case T_WHILE:
         next_token();
-        n = new Node(N_WHILE);
         match_token(T_PARENT);
-        n->add(parse_expr());
+        n = new Node(N_WHILE, parse_expr());
         match_token(T_CLOSE_PARENT);
         n->add(parse_stmt());
         return n;
 
     case T_IF:
         next_token();
-        n = new Node(N_IF);
         match_token(T_PARENT);
-        n->add(parse_expr());
+        n = new Node(N_IF, parse_expr());
         match_token(T_CLOSE_PARENT);
         n->add(parse_stmt());
         if (m_tok.type == T_ELSE) {
@@ -258,31 +313,68 @@ RootNode* Parser::parse_program() {
 
         DataType dt;
         if (try_parse_data_type(dt)) {
-            Node* n = new Node(N_VAR_DECL);
-            n->data_type = dt;
-            n->name = match_token(T_ID).name;
-            try_parse_array(n->data_type);
+            std::string name = match_token(T_ID).name;
+            try_parse_array(dt);
             match_token(T_SEMICOLON);
 
-            m_root->add(n);
-
-            continue;
+            Node* n = new Node(N_VAR_DECL);
+            n->name = name;
+            n->data_type = dt;
+            // XXX
+            // m_root->add(n);
         }
+        else if (m_tok.type == T_ENUM) {
+            next_token();
+            match_token(T_BRACE);
 
+            int i = 0;
+            for (;;) {
+                if (m_tok.type == T_ID) {
+                    std::string name = next_token().name;
+                    assert(m_root->enums.count(name) == 0);
+                    assert(m_root->structs.count(name) == 0);
+                    if (m_tok.type == T_ASSIGN) {
+                        next_token();
+                        Node* n = parse_expr(T_LOGIC_OR);
+                        assert(n->type == N_NUMBER);
+                        i = n->number;
+                        delete n;
+                    }
 
-        if (m_tok.type == T_ENUM) {
-
-            continue;
+                    m_root->enums[name] = i++;
+                    if (m_tok.type == T_COMMA) {
+                        next_token();
+                        continue;
+                    }
+                }
+                break;
+            }
+            match_token(T_CLOSE_BRACE);
+            match_token(T_SEMICOLON);
         }
-        if (m_tok.type == T_STRUCT) {
-
-            continue;
+        else if (m_tok.type == T_STRUCT) {
+            next_token();
+            std::string name = match_token(T_ID).name;
+            assert(m_root->enums.count(name) == 0);
+            assert(m_root->structs.count(name) == 0);
+            Struct& s = m_root->structs[name];
+            s.name = name;
+            match_token(T_BRACE);
+            DataType dt;
+            while (try_parse_data_type(dt)) {
+                std::string name = match_token(T_ID).name;
+                try_parse_array(dt);
+                match_token(T_SEMICOLON);
+                s.fields.push_back({ name, dt });
+            }
+            match_token(T_CLOSE_BRACE);
+            match_token(T_SEMICOLON);
         }
-
-
-        printf("%d:%d: parser error: unexpected token %d\n",
-            m_tok.row, m_tok.col, m_tok.type);
-        exit(1);
+        else {
+            printf("%d:%d: parser error: unexpected token %d\n",
+                m_tok.row, m_tok.col, m_tok.type);
+            exit(1);
+        }
     }
 
 
