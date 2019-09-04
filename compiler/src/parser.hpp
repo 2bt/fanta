@@ -51,6 +51,7 @@ enum NodeType {
 
 
 struct Struct;
+struct Function;
 
 
 struct DataType {
@@ -79,6 +80,7 @@ struct Node {
 
     std::string        name;
     int                number;
+    Function*          function; // TODO
     DataType           data_type;
 };
 
@@ -97,15 +99,25 @@ struct Struct {
         return s;
     }
 
+    bool               is_defined = false;
     std::string        name;
     std::vector<Field> fields;
 };
 
 struct Function {
     ~Function() { for (Node const* n : stmts) delete n; }
+    std::string signature_str() const {
+        // return type is ignored
+        std::string s = name + '(';
+        for (auto const& p : params) {
+            if (s.back() != '(') s += ", ";
+            s += p.data_type.to_string();
+        }
+        return s + ')';
+    }
 
     std::string        name;
-    DataType           data_type;
+    DataType           return_type;
     std::vector<Field> params;
     std::vector<Node*> stmts;
 };

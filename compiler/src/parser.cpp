@@ -41,7 +41,7 @@ void RootNode::print() const {
     printf("FUNCTIONS\n");
     for (auto const& p : functions) {
         Function const& f = p.second;
-        printf("  %s %s\n", f.name.c_str(), f.data_type.to_string().c_str());
+        printf("  %s %s\n", f.name.c_str(), f.return_type.to_string().c_str());
         for (Field const& f : f.params) {
             printf("    %s %s\n", f.name.c_str(), f.data_type.to_string().c_str());
         }
@@ -250,7 +250,7 @@ bool Parser::try_parse_data_type(DataType& dt) {
         ++dt.pointer;
     }
     return true;
-};
+}
 
 
 bool Parser::try_parse_array(DataType& dt) {
@@ -339,12 +339,11 @@ RootNode* Parser::parse_program() {
         if (try_parse_data_type(dt)) {
             std::string name = match_token(T_ID).name;
             if (m_tok.type == T_PARENT) {
-                // function declaration
+                // function
 
-                assert(m_root->functions.count(name) == 0);
-                Function& f = m_root->functions[name];
+                Function f;
                 f.name = name;
-                f.data_type = dt;
+                f.return_type = dt;
 
                 next_token();
                 if (m_tok.type != T_CLOSE_PARENT) {
@@ -358,11 +357,21 @@ RootNode* Parser::parse_program() {
                 }
                 next_token();
 
-                match_token(T_BRACE);
-                while (m_tok.type != T_CLOSE_BRACE) {
-                    f.stmts.push_back(parse_stmt());
+                if (m_tok.type == T_SEMICOLON) {
+                    // declaration
+                    next_token();
                 }
-                next_token();
+                else {
+                    // definition
+                    match_token(T_BRACE);
+                    while (m_tok.type != T_CLOSE_BRACE) {
+                        f.stmts.push_back(parse_stmt());
+                    }
+                    next_token();
+                    assert(m_root->functions.count(f.signature_str()) == 0);
+                    //m_root->functions[f.signature_str()] = std::move(f);
+                    std::swap(m_root->functions[f.signature_str()], f);
+                }
             }
             else {
                 // variable declaration
@@ -372,6 +381,30 @@ RootNode* Parser::parse_program() {
                 Field& g = m_root->globals[name];
                 g.name = name;
                 g.data_type = dt;
+            }
+        }
+        else if (m_tok.type == T_STRUCT) {
+            next_token();
+            std::string name = match_token(T_ID).name;
+            assert(m_root->enums.count(name) == 0);
+            Struct& s = m_root->structs[name];
+            if (m_tok.type == T_SEMICOLON) {
+                next_token();
+            }
+            else {
+                assert(!s.is_defined);
+                s.is_defined = true;
+                s.name = name;
+                match_token(T_BRACE);
+                DataType dt;
+                while (try_parse_data_type(dt)) {
+                    std::string name = match_token(T_ID).name;
+                    try_parse_array(dt);
+                    match_token(T_SEMICOLON);
+                    s.fields.push_back({ name, dt });
+                }
+                match_token(T_CLOSE_BRACE);
+                match_token(T_SEMICOLON);
             }
         }
         else if (m_tok.type == T_ENUM) {
@@ -391,7 +424,6 @@ RootNode* Parser::parse_program() {
                         i = n->number;
                         delete n;
                     }
-
                     m_root->enums[name] = i++;
                     if (m_tok.type == T_COMMA) {
                         next_token();
@@ -399,24 +431,6 @@ RootNode* Parser::parse_program() {
                     }
                 }
                 break;
-            }
-            match_token(T_CLOSE_BRACE);
-            match_token(T_SEMICOLON);
-        }
-        else if (m_tok.type == T_STRUCT) {
-            next_token();
-            std::string name = match_token(T_ID).name;
-            assert(m_root->enums.count(name) == 0);
-            assert(m_root->structs.count(name) == 0);
-            Struct& s = m_root->structs[name];
-            s.name = name;
-            match_token(T_BRACE);
-            DataType dt;
-            while (try_parse_data_type(dt)) {
-                std::string name = match_token(T_ID).name;
-                try_parse_array(dt);
-                match_token(T_SEMICOLON);
-                s.fields.push_back({ name, dt });
             }
             match_token(T_CLOSE_BRACE);
             match_token(T_SEMICOLON);

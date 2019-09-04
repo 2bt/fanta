@@ -11,6 +11,8 @@ int main(int argc, char** argv) {
 
 enum { A, B, C };
 
+struct Vec;
+
 struct Vec {
     int x;
     int y;
@@ -24,15 +26,16 @@ struct Bar {
 
 int* a;
 
+int foo(Vec* v);
 
 int foo(Vec* v) {
     a = 1 + C;
     return v->x * v->y;
 }
 
+Vec v;
 
 int main() {
-
 
     return 0;
 }

@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.7)
 
-add_compile_options(-std=c++17 -Wall -O2)
+#add_compile_options(-std=c++17 -Wall -O2)
+add_compile_options(-std=c++17 -O0 -g)
 
 project(compiler)
 
