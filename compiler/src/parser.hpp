@@ -56,34 +56,12 @@ struct Struct;
 struct DataType {
     std::string to_string() const;
     int size() const;
-
-    enum Type {
-        VOID,
-        INT,
-        STRUCT,
-    };
+    enum Type { VOID, INT, STRUCT };
     Type    type     = VOID;
     int     pointer  = 0;
     bool    is_array = false;
     int     length   = 0;
     Struct* strct    = nullptr;
-
-};
-
-
-struct Struct {
-    int size() const {
-        int s = 0;
-        for (auto const& f : fields) s += f.data_type.size();
-        return s;
-    }
-
-    struct Field {
-        std::string name;
-        DataType    data_type;
-    };
-    std::string        name;
-    std::vector<Field> fields;
 };
 
 
@@ -94,9 +72,7 @@ struct Node {
     ~Node() { for (Node const* k : kids) delete k; }
 
     void print(int indent = 0) const;
-    void add(Node* kid) {
-        kids.push_back(kid);
-    }
+    void add(Node* kid) { kids.push_back(kid); }
 
     NodeType           type;
     std::vector<Node*> kids;
@@ -107,18 +83,45 @@ struct Node {
 };
 
 
+
+struct Field {
+    std::string name;
+    DataType    data_type;
+};
+
+
+struct Struct {
+    int size() const {
+        int s = 0;
+        for (auto const& f : fields) s += f.data_type.size();
+        return s;
+    }
+
+    std::string        name;
+    std::vector<Field> fields;
+};
+
+struct Function {
+    ~Function() { for (Node const* n : stmts) delete n; }
+
+    std::string        name;
+    DataType           data_type;
+    std::vector<Field> params;
+    std::vector<Node*> stmts;
+};
+
+
 struct RootNode {
     ~RootNode() {
         //for (Node const* k : kids) delete k;
     }
     void print() const;
 
-    std::map<std::string, int>    enums;
-    std::map<std::string, Struct> structs;
+    std::map<std::string, int>      enums;
+    std::map<std::string, Struct>   structs;
+    std::map<std::string, Function> functions;
+    std::map<std::string, Field>    globals;
 
-    // TODO:
-    // globals
-    // functions
 };
 
 

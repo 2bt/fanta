@@ -9,16 +9,7 @@ int main(int argc, char** argv) {
     Parser parser
 (R"(
 
-enum {
-    A,
-    B,
-    C = A + 4 * (10 << 1),
-    D,
-};
-enum {
-    FOO = 42
-};
-
+enum { A, B, C };
 
 struct Vec {
     int x;
@@ -35,6 +26,7 @@ int* a;
 
 
 int foo(Vec* v) {
+    a = 1 + C;
     return v->x * v->y;
 }
 

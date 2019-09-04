@@ -28,9 +28,24 @@ void RootNode::print() const {
     printf("STRUCTS\n");
     for (auto const& p : structs) {
         printf("  %s\n", p.first.c_str());
-        for (Struct::Field const& f : p.second.fields) {
+        for (Field const& f : p.second.fields) {
             printf("    %s %s\n", f.name.c_str(), f.data_type.to_string().c_str());
         }
+    }
+    printf("GLOBALS\n");
+    for (auto const& p : globals) {
+        Field const& f = p.second;
+        printf("  %s %s\n", f.name.c_str(), f.data_type.to_string().c_str());
+    }
+
+    printf("FUNCTIONS\n");
+    for (auto const& p : functions) {
+        Function const& f = p.second;
+        printf("  %s %s\n", f.name.c_str(), f.data_type.to_string().c_str());
+        for (Field const& f : f.params) {
+            printf("    %s %s\n", f.name.c_str(), f.data_type.to_string().c_str());
+        }
+        for (Node const* n : f.stmts) n->print(4);
     }
 }
 
@@ -168,8 +183,9 @@ Node* Parser::parse_expr(TokenType level) {
             next_token();
             Node* m = parse_expr(it->second);
             // fold constants
-            bool fold = true;
+            bool fold = false;
             if (n->type == N_NUMBER && m->type == N_NUMBER) {
+                fold = true;
                 if      (it->first == T_ADD) n->number += m->number;
                 else if (it->first == T_SUB) n->number -= m->number;
                 else if (it->first == T_MUL) n->number *= m->number;
@@ -188,6 +204,7 @@ Node* Parser::parse_expr(TokenType level) {
                 else if (it->first == T_OR)  n->number = n->number || m->number;
                 else fold = false;
             }
+            printf("%d %d\n", fold, it->first);
             if (fold) delete m;
             else n = new Node(NodeType(it->first), n, m);
             if (it->first == T_BRACKET) {
@@ -324,18 +341,17 @@ RootNode* Parser::parse_program() {
             if (m_tok.type == T_PARENT) {
                 // function declaration
 
-                printf("FUNC\n");
-                printf("  %s %s\n", name.c_str(), dt.to_string().c_str());
+                assert(m_root->functions.count(name) == 0);
+                Function& f = m_root->functions[name];
+                f.name = name;
+                f.data_type = dt;
 
                 next_token();
                 if (m_tok.type != T_CLOSE_PARENT) {
                     for (;;) {
-                        // XXX;
                         assert(try_parse_data_type(dt));
                         name = match_token(T_ID).name;
-                        printf("    %s %s\n", name.c_str(), dt.to_string().c_str());
-
-
+                        f.params.push_back({ name, dt });
                         if (m_tok.type == T_CLOSE_PARENT) break;
                         match_token(T_COMMA);
                     }
@@ -344,23 +360,18 @@ RootNode* Parser::parse_program() {
 
                 match_token(T_BRACE);
                 while (m_tok.type != T_CLOSE_BRACE) {
-                    parse_stmt();
+                    f.stmts.push_back(parse_stmt());
                 }
                 next_token();
-
             }
             else {
                 // variable declaration
                 try_parse_array(dt);
                 match_token(T_SEMICOLON);
-                Node* n = new Node(N_VAR_DECL);
-                n->name = name;
-                n->data_type = dt;
-
-                printf("VAR\n");
-                printf("  %s %s\n", name.c_str(), dt.to_string().c_str());
-                // XXX
-                // m_root->add(n);
+                assert(m_root->globals.count(name) == 0);
+                Field& g = m_root->globals[name];
+                g.name = name;
+                g.data_type = dt;
             }
         }
         else if (m_tok.type == T_ENUM) {
