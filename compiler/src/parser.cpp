@@ -321,14 +321,47 @@ RootNode* Parser::parse_program() {
         DataType dt;
         if (try_parse_data_type(dt)) {
             std::string name = match_token(T_ID).name;
-            try_parse_array(dt);
-            match_token(T_SEMICOLON);
+            if (m_tok.type == T_PARENT) {
+                // function declaration
 
-            Node* n = new Node(N_VAR_DECL);
-            n->name = name;
-            n->data_type = dt;
-            // XXX
-            // m_root->add(n);
+                printf("FUNC\n");
+                printf("  %s %s\n", name.c_str(), dt.to_string().c_str());
+
+                next_token();
+                if (m_tok.type != T_CLOSE_PARENT) {
+                    for (;;) {
+                        // XXX;
+                        assert(try_parse_data_type(dt));
+                        name = match_token(T_ID).name;
+                        printf("    %s %s\n", name.c_str(), dt.to_string().c_str());
+
+
+                        if (m_tok.type == T_CLOSE_PARENT) break;
+                        match_token(T_COMMA);
+                    }
+                }
+                next_token();
+
+                match_token(T_BRACE);
+                while (m_tok.type != T_CLOSE_BRACE) {
+                    parse_stmt();
+                }
+                next_token();
+
+            }
+            else {
+                // variable declaration
+                try_parse_array(dt);
+                match_token(T_SEMICOLON);
+                Node* n = new Node(N_VAR_DECL);
+                n->name = name;
+                n->data_type = dt;
+
+                printf("VAR\n");
+                printf("  %s %s\n", name.c_str(), dt.to_string().c_str());
+                // XXX
+                // m_root->add(n);
+            }
         }
         else if (m_tok.type == T_ENUM) {
             next_token();

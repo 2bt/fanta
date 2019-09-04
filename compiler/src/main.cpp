@@ -6,8 +6,8 @@
 
 int main(int argc, char** argv) {
 
-    Parser parser(
-R"(
+    Parser parser
+(R"(
 
 enum {
     A,
@@ -31,10 +31,21 @@ struct Bar {
 };
 
 
-
 int* a;
 
-    )");
+
+int foo(Vec* v) {
+    return v->x * v->y;
+}
+
+
+int main() {
+
+
+    return 0;
+}
+
+)");
 
     RootNode* s = parser.parse_program();
     s->print();
