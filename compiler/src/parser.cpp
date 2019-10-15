@@ -50,9 +50,11 @@ void RootNode::print() const {
 }
 
 std::string DataType::to_string() const {
+    if (type == INVALID) return "INVALID";
     std::string s = type == VOID ? "void"
                   : type == INT ? "int"
                   : strct->name;
+    assert(pointer > 0);
     s += std::string(pointer, '*');
     if (is_array) s += '[' + std::to_string(length) + ']';
     return s;
@@ -86,33 +88,48 @@ Token Parser::match_token(TokenType type) {
 Node* Parser::parse_expr(TokenType level) {
 
     Node* n;
-    Token t;
+    std::string name;
 
     // unary
     switch (m_tok.type) {
     case T_NUMBER:
         n = new Node(N_NUMBER);
         n->number = next_token().number;
+        n->data_type = { DataType::INT };
         break;
     case T_SUB:
         next_token();
         n = parse_expr(T_DOT);
         if (n->type == N_NUMBER) n->number = -n->number;
-        else n = new Node(N_NEG, n);
+        else {
+            assert(n->data_type == DataType{ DataType::INT });
+            n = new Node(N_NEG, n);
+            n->data_type = { DataType::INT };
+        }
         break;
     case T_NOT:
         next_token();
         n = parse_expr(T_DOT);
         if (n->type == N_NUMBER) n->number = !n->number;
-        else n = new Node(N_NEG, n);
+        else {
+            assert(n->data_type == DataType{ DataType::INT });
+            n = new Node(N_NOT, n);
+            n->data_type = { DataType::INT };
+        }
         break;
     case T_AND:
         next_token();
         n = new Node(N_REF, parse_expr(T_DOT));
+        n->data_type = n->kids.front()->data_type;
+        ++n->data_type.pointer;
+        // TODO: check lvalue
         break;
     case T_MUL:
         next_token();
         n = new Node(N_DEREF, parse_expr(T_DOT));
+        n->data_type = n->kids.front()->data_type;
+        --n->data_type.pointer;
+        assert(n->data_type.pointer >= 0);
         break;
     case T_PARENT:
         next_token();
@@ -121,11 +138,11 @@ Node* Parser::parse_expr(TokenType level) {
         match_token(T_CLOSE_PARENT);
         break;
     case T_ID:
-        t = next_token();
+        name = next_token().name;
         if (m_tok.type == T_PARENT) {
             next_token();
             n = new Node(N_CALL);
-            n->name = t.name;
+            n->name = name;
             // arguments
             if (m_tok.type != T_CLOSE_PARENT) {
                 for (;;) {
@@ -135,16 +152,30 @@ Node* Parser::parse_expr(TokenType level) {
                 }
             }
             next_token();
+
+            // find function
+            Function f;
+            f.name = n->name;
+            for (Node* k : n->kids) f.params.push_back({ "", k->data_type });
+            std::string sign = f.signature_str();
+            printf("looking for function %s\n", sign.c_str());
+
+            assert(m_root->functions.count(sign) > 0);
+            n->function = &m_root->functions[sign];
+            n->data_type = n->function->return_type;
+
         }
         else {
-            auto it = m_root->enums.find(t.name);
+            auto it = m_root->enums.find(name);
             if (it != m_root->enums.end()) {
                 n = new Node(N_NUMBER);
                 n->number = it->second;
+                n->data_type = { DataType::INT };
             }
             else {
                 n = new Node(N_VAR);
-                n->name = t.name;
+                n->name = name;
+                // XXX: lookup
             }
         }
         break;
@@ -204,8 +235,10 @@ Node* Parser::parse_expr(TokenType level) {
                 else if (it->first == T_OR)  n->number = n->number || m->number;
                 else fold = false;
             }
-            printf("%d %d\n", fold, it->first);
-            if (fold) delete m;
+            if (fold) {
+                delete m;
+                n->data_type = { DataType::INT };
+            }
             else n = new Node(NodeType(it->first), n, m);
             if (it->first == T_BRACKET) {
                 match_token(T_CLOSE_BRACKET);

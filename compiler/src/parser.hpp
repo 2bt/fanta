@@ -57,8 +57,16 @@ struct Function;
 struct DataType {
     std::string to_string() const;
     int size() const;
-    enum Type { VOID, INT, STRUCT };
-    Type    type     = VOID;
+    bool operator ==(DataType const& rhs) const {
+        return type == rhs.type &&
+               pointer == rhs.pointer &&
+               is_array == rhs.is_array &&
+               length == rhs.length &&
+               strct == rhs.strct;
+    }
+
+    enum Type { INVALID, VOID, INT, STRUCT };
+    Type    type     = INVALID;
     int     pointer  = 0;
     bool    is_array = false;
     int     length   = 0;

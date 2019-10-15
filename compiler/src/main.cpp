@@ -24,8 +24,6 @@ struct Bar {
 };
 
 
-int* a;
-
 int foo(Vec* v);
 
 int foo(Vec* v) {
@@ -34,8 +32,13 @@ int foo(Vec* v) {
 }
 
 Vec v;
+int i;
 
 int main() {
+    v.x = 1;
+    v.y = 3;
+    i = foo(&v);
+
 
     return 0;
 }
