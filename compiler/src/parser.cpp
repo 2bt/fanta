@@ -176,6 +176,9 @@ Node* Parser::parse_expr(TokenType level) {
                 n = new Node(N_VAR);
                 n->name = name;
                 // XXX: lookup
+
+                // find variable
+
             }
         }
         break;
