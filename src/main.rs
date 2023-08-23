@@ -5,10 +5,11 @@ use lexer::*;
 fn main() {
     let mut lexer = Lexer::new(
         "
-
-=
-      + _x + r 123
-      *
+a
+b# comment
+c
+\"Hello, world!\"
+a1= (r + 123) == 3
 ",
     );
 
@@ -18,10 +19,13 @@ fn main() {
         println!("{:?}", t);
         match t.kind {
             TokenKind::Ident => {
-                println!("name = {:?}", lexer.ident_name(&t));
+                println!("name = {}", lexer.ident_name(&t));
             }
             TokenKind::Number => {
-                println!("number = {:?}", lexer.number_value(&t));
+                println!("number = {}", lexer.number_value(&t));
+            }
+            TokenKind::String => {
+                println!("string = {:?}", lexer.string_value(&t));
             }
             _ => {}
         }
