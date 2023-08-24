@@ -1,12 +1,25 @@
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum TokenKind {
     Invalid,
-
     EOF,
+    // literals
     Ident,
     Number,
     String,
-
+    // keywords
+    Break,
+    Const,
+    Continue,
+    Else,
+    For,
+    Func,
+    If,
+    Int,
+    Return,
+    Struct,
+    Var,
+    While,
+    // operations
     Plus,
     Minus,
     Asterisk,
@@ -21,16 +34,15 @@ pub enum TokenKind {
     Equal,
     NotEqual,
     Less,
-    LessOrEqual,
+    LessEqual,
     Greater,
-    GreaterOrEqual,
+    GreaterEqual,
 
     Or,
     And,
     Bang,
 
     Assign,
-
     PlusAssign,
     MinusAssign,
     AsteriskAssign,
@@ -43,6 +55,7 @@ pub enum TokenKind {
     RightShiftAssign,
 
     Dot,
+    Arrow,
     Semicolon,
     Comma,
     Colon,
@@ -55,7 +68,7 @@ pub enum TokenKind {
     RightBrace,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Token {
     pub kind: TokenKind,
     pub pos: usize,
@@ -108,11 +121,9 @@ impl<'a> Lexer<'a> {
     }
     pub fn string_value(&self, tok: &Token) -> String {
         assert_eq!(tok.kind, TokenKind::String);
-        let mut bytes = vec![];
-
         let code = self.code.as_bytes();
         assert_eq!(code.get(tok.pos), Some(&b'"'));
-
+        let mut bytes = vec![];
         let mut pos = tok.pos + 1;
         loop {
             match code.get(pos) {
@@ -177,7 +188,7 @@ impl<'a> Lexer<'a> {
                     Some(b'=') => tok!(LeftShiftAssign, 2),
                     _ => tok!(LeftShift, 1),
                 },
-                Some(b'=') => tok!(LessOrEqual, 1),
+                Some(b'=') => tok!(LessEqual, 1),
                 _ => tok!(Less),
             },
             b'>' => match n {
@@ -185,7 +196,7 @@ impl<'a> Lexer<'a> {
                     Some(b'=') => tok!(RightShiftAssign, 2),
                     _ => tok!(RightShift, 1),
                 },
-                Some(b'=') => tok!(GreaterOrEqual, 1),
+                Some(b'=') => tok!(GreaterEqual, 1),
                 _ => tok!(Greater),
             },
             b'!' => match n {
@@ -197,6 +208,7 @@ impl<'a> Lexer<'a> {
                 _ => tok!(Plus),
             },
             b'-' => match n {
+                Some(b'>') => tok!(Arrow, 1),
                 Some(b'=') => tok!(MinusAssign, 1),
                 _ => tok!(Minus),
             },
@@ -236,7 +248,25 @@ impl<'a> Lexer<'a> {
             b']' => tok!(RightBracket),
             b'{' => tok!(LeftBrace),
             b'}' => tok!(RightBrace),
-            c if c == b'_' || c.is_ascii_alphabetic() => tok!(Ident, self.ident_len(self.pos)),
+            c if c == b'_' || c.is_ascii_alphabetic() => {
+                let l = self.ident_len(self.pos);
+                match self.code.get(pos..self.pos + l).unwrap() {
+                    "break" => tok!(Break, l),
+                    "const" => tok!(Const, l),
+                    "continue" => tok!(Continue, l),
+                    "else" => tok!(Else, l),
+                    "for" => tok!(For, l),
+                    "func" => tok!(Func, l),
+                    "if" => tok!(If, l),
+                    "int" => tok!(Int, l),
+                    "return" => tok!(Return, l),
+                    "struct" => tok!(Struct, l),
+                    "var" => tok!(Var, l),
+                    "while" => tok!(While, l),
+                    _ => {}
+                }
+                tok!(Ident, l)
+            }
             c if c.is_ascii_digit() => tok!(Number, self.number_len(self.pos)),
             b'"' => {
                 loop {
